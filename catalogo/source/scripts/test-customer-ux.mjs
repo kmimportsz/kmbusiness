@@ -13,4 +13,36 @@ el('productDetailsQuantity').onclick({target:{closest:()=>({dataset:{select:'one
 vm.runInContext("sharedProductHandled=false;location.search='?modelo=two';render()",ctx);assert.equal(el('productDetailsTitle').textContent,'Bravo');vm.runInContext("sharedProductHandled=false;location.search='?modelo=not-found';render()",ctx);assert.equal(el('informationTitle').textContent,'Este modelo não está no catálogo.');
 vm.runInContext("api=async()=>{throw Error('offline')}",ctx);await vm.runInContext('retryCustomerCatalog()',ctx);assert.equal(vm.runInContext("quantities.get('one')",ctx),2);
 vm.runInContext("checkoutGuidance('Confira seu endereço.','deliveryStreet')",ctx);assert.equal(el('checkoutHelp').textContent,'Confira seu endereço.');assert.ok(!html.includes('id="sizeFilter"'));assert.ok(!html.includes('data-menu-info="evaluation"'));
+vm.runInContext(`activeTab='all';data.products[0].model='Edição-Alfa';render()`,ctx);
+el('search').value='alfa   edicao NIKE';
+el('search').oninput();
+assert.ok(el('grid').innerHTML.includes('Edição-Alfa'));
+assert.ok(!el('grid').innerHTML.includes('Bravo'));
+assert.ok(el('chips').innerHTML.includes('data-filter="Todos" aria-pressed="true"'));
+
+let storageWrites=0;
+ctx.localStorage={setItem(){storageWrites++},removeItem(){storageWrites++}};
+vm.runInContext("const loadedCatalog=data;data={products:[],phone:''};render();data=loadedCatalog",ctx);
+assert.equal(storageWrites,0);
+
+vm.runInContext('api=()=>new Promise(resolve=>{globalThis.completePostcode=resolve})',ctx);
+el('deliveryCep').value='02900-000';
+const firstLookup=el('deliveryCep').onblur();
+el('deliveryStreet').value='Rua digitada';
+for(const listener of el('deliveryStreet').listeners.input)listener();
+ctx.completePostcode({street:'Rua da consulta',city:'São Paulo',state:'SP'});
+await firstLookup;
+assert.equal(el('deliveryStreet').value,'Rua digitada');
+const secondLookup=el('deliveryCep').onblur();
+ctx.completePostcode({street:'',city:'São Paulo',state:'SP'});
+await secondLookup;
+assert.equal(el('deliveryStreet').value,'Rua digitada');
+assert.equal(el('deliveryLocality').textContent,'São Paulo/SP');
+
+vm.runInContext(`selected.add('one');selected.add('two');api=async()=>({...data,products:data.products.map(p=>p.id==='one'?{...p,price:125}:p.id==='two'?{...p,available:false}:p)})`,ctx);
+await el('send').onclick({preventDefault(){}});
+assert.equal(el('summaryDialog').open,true);
+assert.match(el('checkoutHelp').textContent,/indisponíveis.*preços mudaram/);
+assert.match(el('summaryTotal').textContent,/250,00/);
+assert.doesNotMatch(el('summaryItems').innerHTML,/Bravo/);
 console.log('Customer UX verified: filters, global price sorting, range validation/reset, menu, photo details, specific-model links/share fallbacks, bag synchronization, deep links, help and offline choice preservation.');
