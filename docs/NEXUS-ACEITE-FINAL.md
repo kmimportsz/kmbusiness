@@ -118,3 +118,12 @@ Evidências por ambiente: **C** suíte `catalogo/source`, **R** suíte da raiz, 
 - [Vídeo da volta completa da trilha de neon](nexus-evidencias/neon-final.mp4). O vídeo amostra o deslocamento SVG ao longo de um ciclo. Ele demonstra o efeito visual e a duração; não mede a taxa de quadros num aparelho.
 - [Resultados Lighthouse mobile local](nexus-evidencias/lighthouse-local.json). As notas evoluíram de 75/96/96 para 98/100/100. O LCP caiu de 6,5 s para 2,2 s. A medição usou a mesma demonstração isolada e dados fictícios, antes e depois da otimização da arte e da fonte originais. A homologação com Firestore, Worker, catálogo real e um iPhone físico permanece necessária.
 - Os dois refinamentos foram avaliados sob os [requisitos de neon](https://github.com/kmimportsz/kmbusiness/issues/2#issuecomment-7174579723) e [os cinco refinamentos finais](https://github.com/kmimportsz/kmbusiness/issues/2#issuecomment-7174617460).
+
+## Rodada de homologação adicional
+
+O código executado é o commit `e14b53d09f76c517d9e771b95836a3c63c72c90a`. Nesta rodada, os commits de entrega de evidência acrescentam documentação e resultados, sem alterações de aplicação ou design.
+
+- Passaram suíte da raiz, catálogo, build e verificação de sintaxe do Worker, Chromium, WebKit e Firestore Emulator. A suíte Trial falhou na primeira execução concorrente com outros testes em `trial/tests/app.cjs:18` (esperado 1, obtido 0) e passou na repetição separada. Causa não confirmada. O diretório Trial não foi alterado.
+- O [Lighthouse mobile local](nexus-evidencias/lighthouse-homologacao.json) repetiu 98/100/100, com LCP de 2,18 s, na demonstração fictícia.
+- O [registro de backup e restauração](nexus-evidencias/backup-homologacao.json) contém contagens e hashes. A base Firestore sintética de oito documentos foi restaurada em um segundo emulador vazio com SHA-256 idêntico. O ZIP de catálogo de teste foi restaurado em um bucket de teste que serviu catálogo e imagem através do Worker. Também foi feita uma cópia dos 18 produtos públicos e 18 imagens referenciadas do catálogo oficial. Os objetos da cópia e o manifesto foram conferidos no arquivo compactado, e o Worker isolado serviu o conteúdo restaurado. Os arquivos de backup permanecem fora do Git. Essa evidência cobre apenas o recorte público do catálogo oficial e a base Firestore sintética.
+- [Checklist do iPhone físico](NEXUS-CHECKLIST-IPHONE.md) · [Passos para conceder acessos temporários](NEXUS-HOMOLOGACAO-ACESSO.md).

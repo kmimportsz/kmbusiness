@@ -1,0 +1,13 @@
+{
+  "candidate": "e14b53d09f76c517d9e771b95836a3c63c72c90a",
+  "environment": "Local, mobile emulado, catálogo de demonstração",
+  "version": "13.1.0",
+  "measuredAt": "2026-11-25T21:31:17.685Z",
+  "formFactor": "mobile",
+  "scores": {
+    "performance": 0.98,
+    "accessibility": 1,
+    "best-practices": 1
+  },
+  "largestContentfulPaintMs": 2179.3461111015295
+}
