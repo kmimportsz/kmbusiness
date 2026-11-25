@@ -26,3 +26,9 @@ await assert.rejects(send({...body,key:crypto.randomUUID(),items:[...body.items,
 const newFee=await send({...body,key:crypto.randomUUID()});
 assert.equal(newFee.shippingCents,2000);
 console.log('PASS pedidos: catálogo autoritativo, concorrência, resposta perdida, frete, dados públicos e deduplicação.');
+const allowed='https://kmimportsz.github.io';
+const url='https://catalog.example.invalid/api/orders';
+const {default:worker}=await import('../worker/index.js');
+const post=(origin,text)=>new Request(url,{method:'POST',headers:{origin,'content-type':'application/json'},body:text});
+assert.equal((await worker.fetch(post('https://other.example.invalid','{}'),{})).status,403);
+assert.equal((await worker.fetch(post(allowed,'x'.repeat(16001)),{})).status,413);

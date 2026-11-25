@@ -25,8 +25,9 @@ let orderTokenCache;
 async function orderGoogleToken(env){
  const raw=env.ORDER_FIRESTORE_WRITER;
  if(!raw)throw new OrderError('Registro de pedidos temporariamente indisponível.',503);
- if(orderTokenCache?.credential===raw&&orderTokenCache.expires>Date.now()+60000)return orderTokenCache.token;
  const credential=JSON.parse(raw);
+ const account=env.ORDER_FIRESTORE_PROJECT+':'+credential.client_email;
+ if(orderTokenCache?.account===account&&orderTokenCache.expires>Date.now()+60000)return orderTokenCache.token;
  const now=Math.floor(Date.now()/1000);
  const message=orderEncode(JSON.stringify({alg:'RS256',typ:'JWT'}))+'.'+orderEncode(JSON.stringify({
   iss:credential.client_email,scope:'https://www.googleapis.com/auth/datastore',aud:'https://oauth2.googleapis.com/token',iat:now,exp:now+3600
@@ -39,7 +40,7 @@ async function orderGoogleToken(env){
  }),signal:AbortSignal.timeout(8000)});
  const body=await res.json();
  if(!res.ok||!body.access_token)throw new OrderError('Registro de pedidos temporariamente indisponível.',503);
- orderTokenCache={credential:raw,token:body.access_token,expires:Date.now()+body.expires_in*1000};
+ orderTokenCache={account,token:body.access_token,expires:Date.now()+body.expires_in*1000};
  return body.access_token;
 }
 export function orderStore(env){
@@ -103,13 +104,29 @@ export async function registerOrder(body,store,getCatalog,quoteDelivery){
  if(!winner)throw new OrderError('Tente consultar o pedido novamente.',503);
  return result(winner);
 }
+async function readOrderBody(req){
+ const limit=16000;
+ if(Number(req.headers.get('content-length'))>limit)throw new OrderError('Pedido muito longo.',413);
+ if(!req.body)throw new OrderError('Confira os dados do pedido.');
+ const reader=req.body.getReader(),decoder=new TextDecoder();
+ let size=0,text='';
+ try{
+  for(;;){
+   const {done,value}=await reader.read();
+   if(done)break;
+   size+=value.byteLength;
+   if(size>limit){await reader.cancel();throw new OrderError('Pedido muito longo.',413)}
+   text+=decoder.decode(value,{stream:true});
+  }
+  return text+decoder.decode();
+ }finally{reader.releaseLock()}
+}
 export async function orderEndpoint(req,env,{headers,reply},getCatalog,quoteDelivery){
  try{
   if(req.method==='OPTIONS')return new Response(null,{status:204,headers});
   if(req.method!=='POST'||!req.headers.get('content-type')?.startsWith('application/json'))throw new OrderError('Envio inválido.',405);
   if(!req.headers.get('origin')||req.headers.get('origin')!==headers['access-control-allow-origin'])throw new OrderError('Origem inválida.',403);
-  const raw=await req.text();
-  if(raw.length>16000)throw new OrderError('Pedido muito longo.',413);
+  const raw=await readOrderBody(req);
   let body;
   try{body=JSON.parse(raw)}catch{throw new OrderError('Confira os dados do pedido.')}
   return reply(await registerOrder(body,orderStore(env),getCatalog,quoteDelivery),201);
