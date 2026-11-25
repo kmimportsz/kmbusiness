@@ -6,7 +6,7 @@ const fs=require('node:fs');
  const browser=engine==='webkit'?await webkit.launch():await chromium.launch({
   executablePath:process.env.KM_CHROMIUM_PATH||undefined,headless:true,args:['--no-sandbox']
  });
- const origin='http://127.0.0.1:8855';
+ const origin=process.env.KM_TEST_ORIGIN||'http://127.0.0.1:8855';
  const stock={products:[
   {id:'camiseta',brand:'Marca fictícia',model:'Camiseta A',size:'M',price:80,photo:'/images/one',measurements:[{label:'Comprimento',value:64,unit:'cm'}]},
   {id:'outra',brand:'Marca fictícia',model:'Regata B',size:'G',price:45,photo:'/images/one'},
@@ -41,9 +41,22 @@ const fs=require('node:fs');
   await page.goto(origin+'/catalogo/');
   await page.locator('#grid [data-select="camiseta"]').waitFor();
   assert.equal(await page.locator('aside.checkout').count(),0);
+  assert.equal(await page.locator('#dockHome').getAttribute('aria-pressed'),'true');
+  assert.equal(await page.locator('.catalog-electric-head animateMotion').getAttribute('dur'),'5.143s');
   await page.locator('#dockSearch').click();
+  assert.equal(await page.locator('#dockSearch').getAttribute('aria-pressed'),'true');
+  const navigationState=await page.evaluate(()=>{
+   window.dispatchEvent(new Event('scroll'));
+   const trace=document.querySelector('.catalog-dock-trace');
+   return {dimmed:document.documentElement.hasAttribute('data-dock-dimmed'),paused:trace.animationsPaused()};
+  });
+  assert.equal(navigationState.dimmed,true);
+  assert.equal(navigationState.paused,reducedMotion==='reduce');
   await page.locator('#search').fill('camizeta');
-  await page.locator('[data-discovery="favorite"][data-model="camiseta"]').click();
+  const favorite=page.locator('[data-discovery="favorite"][data-model="camiseta"]');
+  await favorite.click();
+  assert.equal(await favorite.getAttribute('aria-pressed'),'true');
+  assert.equal(await favorite.locator('.discovery-heart').evaluate(heart=>getComputedStyle(heart).fill),'rgb(112, 169, 255)');
   await page.locator('#showCatalogFavorites').click();
   await page.locator('[data-discovery="compare"][data-model="camiseta"]').click();
   await page.locator('#showCatalogCompare').click();
@@ -53,6 +66,13 @@ const fs=require('node:fs');
   assert.equal(await page.locator('#catalogMeasurementGuide').getAttribute('hidden'),null);
   await page.locator('#closeProductDetails').click();
   await page.locator('#showCatalogFavorites').click();
+  const photo=page.locator('#grid [data-product="camiseta"]');
+  await photo.scrollIntoViewIfNeeded();
+  await photo.focus();
+  const beforeDetails=await page.evaluate(()=>window.scrollY);
+  await photo.press('Enter');
+  await page.locator('#closeProductDetails').click();
+  await page.waitForFunction(y=>window.scrollY===y&&document.activeElement?.dataset.product==='camiseta',beforeDetails);
   await page.locator('#search').clear();
   await page.locator('#dockHome').focus();
   const addition=await page.evaluate(()=>{
@@ -136,7 +156,7 @@ const fs=require('node:fs');
   if(reducedMotion==='no-preference')await page.waitForTimeout(1300);
   else {
    assert.equal(await page.locator('.nexus-arc').evaluate(el=>getComputedStyle(el).animationName),'none');
-   assert.equal(await page.locator('.catalog-dock-trace rect').evaluate(el=>getComputedStyle(el).animationName),'none');
+   assert.equal(await page.locator('.catalog-electric-head').evaluate(el=>getComputedStyle(el).display),'none');
   }
   assert.equal(await page.locator('#nexusTitle').textContent(),'Pedido efetuado com sucesso!');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth),width);
@@ -147,13 +167,46 @@ const fs=require('node:fs');
   const message=url.searchParams.get('text');
   assert.ok(message.includes('Camiseta A')&&message.includes('80,00')&&!message.includes('Observações:')&&!message.includes('Referência:'));
   await page.screenshot({path:output+'/'+label+'-confirmado.png'});
+  await page.evaluate(()=>{
+   Object.defineProperty(navigator,'share',{value:undefined,configurable:true});
+   Object.defineProperty(navigator,'clipboard',{value:{writeText:async text=>{window.kmCopied=text}},configurable:true});
+  });
+  await page.locator('#nexusCopy').click();
+  assert.equal(await page.evaluate(()=>window.kmCopied),firstKey.replaceAll('-','').toUpperCase());
   assert.equal(await page.evaluate(()=>localStorage.getItem('km.catalog.remembered-name.v1')),'Pessoa Teste');
   await page.locator('#nexusBack').click();
   assert.equal(await page.locator('#summaryDialog').evaluate(el=>el.open),false);
   await page.locator('#send').click();
+  await page.locator('#forgetOrderName').click();
+  assert.equal(await page.evaluate(()=>localStorage.getItem('km.catalog.remembered-name.v1')),null);
   await page.locator('#clearChoices').click();
   assert.notEqual(await page.locator('#dockCartCount').getAttribute('hidden'),null);
   assert.equal(await page.locator('#dockCartStatus').textContent(),'Sacola vazia.');
+  if(label==='mobile'){
+   await page.locator('#continueShopping').click();
+   await page.locator('.catalog-discovery details > summary').click();
+   await page.locator('#catalogRememberBrowsing').check();
+   const search=page.locator('#search');
+   await search.fill('Camiseta');
+   await search.blur();
+   await page.locator('#grid [data-product="camiseta"]').click();
+   await page.locator('#quickProductPurchase').click();
+   await page.locator('#summaryDialog').waitFor();
+   assert.equal(await page.locator('#dockCartCount').textContent(),'1');
+   await page.locator('#shareBag').click();
+   const shared=new URL(await page.evaluate(()=>window.kmCopied));
+   assert.deepEqual(JSON.parse(shared.searchParams.get('sacola')),[['camiseta',1]]);
+   await page.locator('#continueShopping').click();
+   assert.equal(await page.locator('#showCatalogRecent').getAttribute('hidden'),null);
+   await page.locator('#showCatalogRecent').click();
+   assert.equal(await page.locator('#grid [data-product]').count(),1);
+   let saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('km.catalog.discovery.v1')));
+   assert.deepEqual(saved.products,['camiseta']);
+   assert.ok(saved.searches.includes('Camiseta'));
+   await page.locator('#clearCatalogDiscovery').click();
+   saved=await page.evaluate(()=>localStorage.getItem('km.catalog.discovery.v1'));
+   assert.equal(saved,null);
+  }
   assert.ifError(error);
   await page.close();
  }
