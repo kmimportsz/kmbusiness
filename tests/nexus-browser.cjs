@@ -20,6 +20,8 @@ const fs=require('node:fs');
   await page.route('**/*',async route=>{
    const u=new URL(route.request().url());
    if(u.origin===origin)return route.continue();
+   if(u.pathname==='/images/one')return route.fulfill({contentType:'image/svg+xml',body:
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300"><rect width="300" height="300" fill="#172030"/><path d="M107 63l-41 18-29 45 38 22 20-19v112h110V129l20 19 38-22-29-45-41-18c-10 26-76 26-86 0z" fill="#b9c4d6" stroke="#70849e" stroke-width="4"/></svg>'});
    if(u.pathname==='/api/catalog')return route.fulfill({json:stock});
    if(u.pathname==='/api/catalog-visit')return route.fulfill({json:{total:1}});
    if(u.pathname==='/api/orders'){
@@ -34,6 +36,9 @@ const fs=require('node:fs');
    return route.abort();
   });
   await page.goto(origin+'/catalogo/');
+  await page.locator('#grid [data-select="camiseta"]').waitFor();
+  assert.equal(await page.locator('aside.checkout').count(),0);
+  await page.locator('#dockSearch').click();
   await page.locator('#search').fill('camizeta');
   await page.locator('[data-discovery="favorite"][data-model="camiseta"]').click();
   await page.locator('#showCatalogFavorites').click();
@@ -46,7 +51,21 @@ const fs=require('node:fs');
   await page.locator('#closeProductDetails').click();
   await page.locator('#showCatalogFavorites').click();
   await page.locator('#grid [data-select="camiseta"]').click();
+  assert.equal(await page.locator('#dockCartCount').textContent(),'1');
+  const dockRatio=(await page.locator('#checkout').boundingBox()).width/width;
+  if(width<500)assert.ok(dockRatio>=.75&&dockRatio<=.8);
+  assert.ok(await page.locator('#checkout button').evaluateAll(buttons=>buttons.every(b=>b.offsetWidth>=44&&b.offsetHeight>=44)));
+  if(label==='mobile'){
+   await page.screenshot({path:output+'/mobile-menu.png'});
+   for(let i=0;i<16;i++){
+    await page.screenshot({path:output+'/dock-'+String(i).padStart(2,'0')+'.png'});
+    await page.waitForTimeout(90);
+   }
+  }
   await page.locator('#send').click();
+  await page.locator('#summaryItems [data-remove]').click();
+  await page.locator('#undoBagRemoval').click();
+  assert.equal(await page.locator('#dockCartCount').textContent(),'1');
   await page.locator('#customerName').fill('Pessoa Teste');
   await page.locator('#rememberOrderName').check();
   await page.locator('[name=deliveryMode][value=pickup]').check();
@@ -69,7 +88,10 @@ const fs=require('node:fs');
   }
   await page.locator('#nexusResult[data-state=success]').waitFor();
   if(reducedMotion==='no-preference')await page.waitForTimeout(1300);
-  else assert.equal(await page.locator('.nexus-arc').evaluate(el=>getComputedStyle(el).animationName),'none');
+  else {
+   assert.equal(await page.locator('.nexus-arc').evaluate(el=>getComputedStyle(el).animationName),'none');
+   assert.equal(await page.locator('.catalog-dock-trace rect').evaluate(el=>getComputedStyle(el).animationName),'none');
+  }
   assert.equal(await page.locator('#nexusTitle').textContent(),'Pedido efetuado com sucesso!');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth),width);
   assert.equal(await page.locator('#nexusResult').evaluate(el=>el.scrollWidth),await page.locator('#nexusResult').evaluate(el=>el.clientWidth));
