@@ -149,7 +149,7 @@ dialog[open]::backdrop{animation:km-backdrop-in 150ms ease-out}
 .nexus-check{stroke:#5ed79b;stroke-dasharray:100;stroke-dashoffset:100;opacity:0}
 #nexusResult[data-state="success"] .nexus-check{animation:nexus-draw .3s .32s ease-out forwards}
 #nexusTitle{font:600 clamp(20px,4vw,29px)/1.3 Inter,sans-serif;margin:0}
-#nexusTitle span{white-space:pre;animation:nexus-reveal .24s both;animation-delay:calc(.4s + var(--order-letter)*.02s)}
+#nexusTitle span{animation:nexus-reveal .24s both;animation-delay:calc(.4s + var(--order-letter)*.02s)}
 .nexus-detail{overflow-wrap:anywhere;animation:nexus-reveal .3s 1s both}
 .nexus-steps{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:16px 50px 0 22px;font-size:12px}
 .nexus-steps button,.nexus-options button{border:1px solid #30394a;border-radius:16px;color:inherit;background:transparent;min-height:36px;padding:6px 10px}
@@ -622,6 +622,7 @@ function orderWhatsApp(receipt){
 function renderOrderResult(receipt){
  const heading=$('nexusTitle'),phrase='Pedido efetuado com sucesso!';
  heading.replaceChildren(...Array.from(phrase,(letter,index)=>{
+  if(letter===' ')return document.createTextNode(' ');
   const span=document.createElement('span');span.textContent=letter;span.setAttribute('aria-hidden','true');
   span.style.setProperty('--order-letter',index);return span;
  }));

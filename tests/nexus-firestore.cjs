@@ -11,7 +11,8 @@ async function run(){
  const rules=readFileSync('firestore/nexus-orders.rules','utf8');
  const environment=await initializeTestEnvironment({projectId:'demo-nexus',firestore:{host:endpoint[1],port:Number(endpoint[2]),rules:
   'rules_version = \'2\'; service cloud.firestore { match /databases/{database}/documents { '+rules+
-  ' match /{collection}/{id} { allow read, write: if nexusOperator() && collection in [\'sales\',\'products\',\'config\']; } }}'}});
+  ' match /sales/{id} { allow read: if nexusOperator(); allow write: if nexusOperator() && (!nexusManagedSaleId(id) || nexusManagedSaleWrite(id)); }'+
+  ' match /{collection}/{id} { allow read, write: if nexusOperator() && collection in [\'products\',\'config\']; } }}'}});
  const {JSDOM}=require('jsdom');
  const page=new JSDOM('<button data-nexus-count></button><div id="modal"></div>',{runScripts:'outside-only'});
  try{
@@ -30,6 +31,33 @@ async function run(){
     ...['first','second','third'].map(id=>setDoc(doc(db,'nexusOrders',id),order))
    ]);
   });
+
+  // Route the production adapter to the emulator. No Google API or storage is contacted.
+  const {generateKeyPairSync}=require('node:crypto');
+  const worker=(await import('../catalogo/source/worker/index.js')).default;
+  const testId='3b697038-fcac-447d-a96c-7b60127c9d07';
+  const {privateKey}=generateKeyPairSync('rsa',{modulusLength:2048,privateKeyEncoding:{type:'pkcs8',format:'pem'}});
+  const nativeFetch=global.fetch;
+  global.fetch=async(url,options={})=>{
+   const endpoint=new URL(url);
+   if(endpoint.origin==='https://oauth2.googleapis.com')return Response.json({access_token:'owner',expires_in:3600});
+   if(endpoint.origin==='https://firestore.googleapis.com')return nativeFetch('http://'+process.env.FIRESTORE_EMULATOR_HOST+endpoint.pathname+endpoint.search,options);
+   if(endpoint.hostname!=='127.0.0.1'&&endpoint.hostname!=='localhost')throw Error('Rede externa bloqueada no teste.');
+   return nativeFetch(url,options);
+  };
+  try{
+   const env={ORDER_FIRESTORE_WRITER:JSON.stringify({client_email:'worker@example.invalid',private_key:privateKey}),
+    ORDER_FIRESTORE_PROJECT:'demo-nexus',BUCKET:{get:async()=>({json:async()=>({
+     products:[{id:'camiseta',brand:'Marca Teste',model:'Camiseta A',size:'M',price:80}],phone:'5511999999999'
+    })})}};
+   const valid=()=>new Request('https://catalog.example.invalid/api/orders',{
+    method:'POST',headers:{origin:'https://kmimportsz.github.io','content-type':'application/json'},
+    body:JSON.stringify({key:testId,mode:'pickup',name:'Pessoa Teste',items:[{id:'camiseta',quantity:2,priceCents:8000}]})
+   });
+   const replies=await Promise.all([worker.fetch(valid(),env),worker.fetch(valid(),env)]);
+   assert.deepEqual(replies.map(r=>r.status),[201,201]);
+   assert.deepEqual(await replies[0].json(),await replies[1].json());
+  }finally{global.fetch=nativeFetch}
   const anon=environment.unauthenticatedContext().firestore();
   const nonOperator=environment.authenticatedContext('other').firestore();
   await assertFails(getDoc(doc(anon,'nexusOrders','first')));
@@ -62,6 +90,8 @@ async function run(){
    }
    assert.fail('Contador não sincronizou para '+n);
   };
+  await count(4);
+  await decide(testId,false);
   await count(3);
   await Promise.all([decide('first',true,['camiseta'],1500,1500),decide('first',true,['camiseta'],1500,1500)]);
   await decide('first',true,['camiseta'],1500,1500);

@@ -2,7 +2,7 @@
 // The operator documents are provisioned by the project administrator through IAM.
 function nexusOperator() {
   return request.auth != null
-    && exists(/databases/$(database)/documents/nexusOperators/$(request.auth.uid));
+    && get(/databases/$(database)/documents/nexusOperators/$(request.auth.uid)).data.active == true;
 }
 match /nexusOperators/{uid} {
   allow read, write: if false;
@@ -32,6 +32,36 @@ match /nexusOrders/{orderId} {
         && getAfter(/databases/$(database)/documents/sales/$(request.resource.data.saleId)).data.orderId == orderId
         && getAfter(/databases/$(database)/documents/sales/$(request.resource.data.saleId)).data.source == 'catalog'
         && getAfter(/databases/$(database)/documents/sales/$(request.resource.data.saleId)).data.inst == []
+      )
+    );
+}
+
+// Use these predicates in the existing /sales/{saleId} rules. Firestore combines
+// matching permissions with OR, so a broad legacy writer must explicitly exclude these IDs.
+function nexusManagedSaleId(saleId) {
+  return saleId.matches('^(pedido|manual)-[A-Za-z0-9_-]+$');
+}
+function nexusManagedSaleWrite(saleId) {
+  let next = request.resource.data;
+  return nexusOperator()
+    && next.id == saleId
+    && next.items is list && next.items.size() > 0 && next.items.size() <= 30
+    && next.inst is list && next.events is list && next.revision is int
+    && (
+      (!exists(/databases/$(database)/documents/sales/$(saleId))
+        && next.revision == 1 && next.inst.size() == 0 && next.events.size() == 1
+        && (
+          (saleId.matches('^manual-.*') && next.source == 'manual') ||
+          (saleId == 'pedido-' + next.orderId && next.source == 'catalog'
+            && getAfter(/databases/$(database)/documents/nexusOrders/$(next.orderId)).data.saleId == saleId
+            && getAfter(/databases/$(database)/documents/nexusOrders/$(next.orderId)).data.status == 'confirmed')
+        )
+      ) ||
+      (exists(/databases/$(database)/documents/sales/$(saleId))
+        && next.revision == resource.data.revision + 1
+        && next.events.size() == resource.data.events.size() + 1
+        && next.events.hasAll(resource.data.events)
+        && !next.diff(resource.data).affectedKeys().hasAny(['id', 'source', 'orderId', 'orderCode', 'createdAt'])
       )
     );
 }

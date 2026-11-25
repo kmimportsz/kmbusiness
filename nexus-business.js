@@ -239,7 +239,7 @@ function editForm(sale){
 }
 async function writeSale(id,version,change,label){
  const ref=saleRef(id),at=new Date().toISOString(),audit=event(label,at);
- await db.runTransaction(async tx=>{
+ try{await db.runTransaction(async tx=>{
   const snap=await tx.get(ref);
   const live=snap.data();
   if(!snap.exists||!managed(live)||live.revision!==version)fail('A venda foi atualizada. Reabra e confira.');
@@ -247,7 +247,12 @@ async function writeSale(id,version,change,label){
   const {stockAdjustment,...record}=updated;
   const entry=stockAdjustment?.length?{...audit,stock:stockAdjustment}:audit;
   tx.set(ref,{...record,revision:version+1,updatedAt:at,events:[...(live.events||[]),entry]});
- });
+ })}catch(error){
+  if(error.code!=='permission-denied')throw error;
+  const latest=await db.runTransaction(tx=>tx.get(ref));
+  if(latest.exists&&latest.data().revision!==version)fail('A venda foi atualizada. Reabra e confira.');
+  throw error;
+ }
 }
 const managed=s=>Boolean(s?.revision&&Array.isArray(s.items));
 function chargeForm(sale,index){
@@ -256,12 +261,13 @@ function chargeForm(sale,index){
  form(existing?'Editar cobrança':'Cadastrar cobrança',field('amount','Valor (R$)',existing?.v,'number','required min=".01" step=".01"')+
   field('due','Vencimento',existing?.d,'date','required')+
   field('note','Descrição',existing?.note,'text','maxlength="300"')+
+  field('method','Forma de pagamento',existing?.paymentMethod,'text','maxlength="60"')+
   field('paid','Data de pagamento efetivado','','date'),
   data=>writeSale(sale.id,sale.revision,live=>{
    const amount=cents(data.get('amount')),due=data.get('due'),paidDate=data.get('paid');
    if(!validMoney(amount)||amount<1||!dateValid(due)||(paidDate&&(!dateValid(paidDate)||paidDate>today())))fail('Confira o valor e as datas.');
    const inst=live.inst.slice();
-   const charge={id:existing?.id||crypto.randomUUID(),v:amount/100,d:due,paid:!!paidDate,pd:paidDate||null,note:data.get('note').trim()};
+   const charge={id:existing?.id||crypto.randomUUID(),v:amount/100,d:due,paid:!!paidDate,pd:paidDate||null,note:data.get('note').trim(),paymentMethod:data.get('method').trim()};
    if(existing)inst[index]=charge;else inst.push(charge);
    if(paymentTotal(inst)>cents(live.price))fail('O valor supera o saldo disponível para cobranças.');
    return {...live,inst};
@@ -320,6 +326,7 @@ saveSale=async function(){
    const products=await readProducts(tx,[pid]);
    sale.events[0].stock=updateStock(tx,products,[],sale.items);tx.set(ref,sale);
   });
+  try{localStorage.removeItem(KEY+'_sale_draft_'+actor())}catch{}
   if(saveButton.isConnected){closeM();go('sales')}
  }catch(failure){if(error.isConnected)error.textContent=failure.message}
  finally{busy.delete(saveButton);saveButton.disabled=false}

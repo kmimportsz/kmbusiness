@@ -193,6 +193,9 @@ const fmt=s=>s.split("-").reverse().slice(0,2).join("/");
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const addDate=(s,i,mode)=>{const d=new Date(s+"T12:00:00");if(mode==="w")d.setDate(d.getDate()+7*i);else if(mode==="q")d.setDate(d.getDate()+15*i);else{const dd=d.getDate();d.setMonth(d.getMonth()+i);if(d.getDate()!==dd)d.setDate(0)}return iso(d)};
 const paid=s=>s.inst.filter(i=>i.paid).reduce((a,i)=>a+i.v,0);
+const saleSettled=s=>window.kmNexus?.managed(s)
+  ? paid(s)>0&&Math.round(paid(s)*100)>=Math.round(s.price*100)
+  : (s.inst||[]).length>0&&s.inst.every(i=>i.paid);
 const status=i=>i.paid?"ok":i.d<today()?"bad":i.d===today()?"warn":"";
 
 function stats(){
@@ -289,7 +292,7 @@ const thumb=s=>s.img?`<img class="thumb" src="${s.img}" alt="">`:`<div class="th
 function cobr(){
   const f=filter,list=allInst().filter(x=>f==="paid"?x.i.paid:f==="late"?(!x.i.paid&&x.i.d<today()):!x.i.paid).sort((a,b)=>a.i.d.localeCompare(b.i.d));
   const commercial=(S.sales||[]).filter(s=>window.kmNexus?.managed(s));
-  return`<h1>Cobranças</h1>${commercial.length?`<details class="card"><summary>Cadastrar cobrança manual</summary>${commercial.map(s=>`<div class="inst"><span>${esc(s.client)} · ${esc(s.orderCode)}</span>${window.kmNexus.button('charge',s.id,'Cadastrar cobrança')}</div>`).join('')}</details>`:''}<div class="row" style="margin-bottom:10px">
+  return`<h1>Cobranças</h1>${commercial.length?`<details class="card"><summary>Cadastrar cobrança manual</summary>${commercial.map(s=>`<div class="inst"><span>${esc(s.client||"Sem nome")} · ${esc(s.orderCode||s.name)}</span>${window.kmNexus.button('charge',s.id,'Cadastrar cobrança')}</div>`).join('')}</details>`:''}<div class="row" style="margin-bottom:10px">
   ${[["","A receber"],["late","Atrasadas"],["paid","Pagas"]].map(([k,t])=>`<button class="${f===k?"":"g"}" onclick="filter='${k}';render()">${t}</button>`).join("")}</div>
   ${list.length?list.map(x=>instRow(x)+(window.kmNexus?.managed(x.s)&&!x.i.paid?`<button type="button" class="g" data-nexus-action="charge" data-nexus-id="${esc(x.s.id)}" data-nexus-index="${x.n}">Editar cobrança</button>`: '')).join(""):`<div class="empty">Nada por aqui</div>`}`;
 }
@@ -311,7 +314,7 @@ function sales(){
   const list=[...S.sales].filter(s=>{
     if(window.b3SelectedOwner&&s.owner!==window.b3SelectedOwner)return false;
     const searchable=norm([s.client,s.name,s.phone,s.price,s.cost,s.note,s.date].join(" "));
-    const done=Array.isArray(s.inst)&&s.inst.length>0&&s.inst.every(i=>i.paid);
+    const done=saleSettled(s);
     const partial=!done&&(s.inst||[]).some(i=>i.paid);
     return (!q||searchable.includes(q))&&(!saleDateFilter||s.date===saleDateFilter)&&(!kmDateFrom||s.date>=kmDateFrom)&&(!kmDateTo||s.date<=kmDateTo)&&(!kmMinPrice||+s.price>=+kmMinPrice)&&(!kmMaxPrice||+s.price<=+kmMaxPrice)&&
       (saleFilter==="all"||(saleFilter==="done"&&done)||(saleFilter==="open"&&!done)||(saleFilter==="partial"&&partial));
@@ -321,12 +324,12 @@ function sales(){
   const dates=[...groups.keys()].sort((a,b)=>b.localeCompare(a));
   const row=s=>{
     const p=paid(s),pct=s.price?Math.min(100,p/s.price*100):0;
-    const done=Array.isArray(s.inst)&&s.inst.length>0&&s.inst.every(i=>i.paid);
+    const done=saleSettled(s);
     return`<details class="card item ${done?"sale-closed":""}"><summary style="list-style:none;cursor:pointer"><div class="row">${thumb(s)}<div class="grow"><div class="row" style="justify-content:space-between;align-items:flex-start;gap:5px"><b>${esc(s.client||"Sem nome")}</b><span class="sale-status ${done?"done":""}">${done?"✓ Pago":p>0?"◷ Parcial":"◷ Pendente"}</span></div>
     <div class="sub">${esc(s.name)} · ${fmt(s.date)} · ${s.source==="catalog"?"Catálogo":"Manual"}</div>
     <div class="sub">Venda <b>${money(s.price)}</b> · Lucro ${money(s.price-s.cost)}</div></div></div>
     <div class="bar"><i style="width:${pct}%"></i></div><div class="sub">Recebido ${money(p)} de ${money(s.price)}</div></summary>
-    ${s.inst.map((i,n)=>`<div class="inst"><span>${n+1}ª · ${fmt(i.d)} · ${money(i.v)} <span class="chip ${status(i)}">${i.paid?"pago":status(i)==="bad"?"atrasada":"aberta"}</span></span><span class="row" style="gap:6px">${i.paid?`<button class="g" onclick="proofForm('${s.id}',${n})">${getProof(s.id,n)?"🧾":"＋🧾"}</button>`:""}<button class="${i.paid?"g":""}" onclick="pay('${s.id}',${n})">${i.paid?"Desfazer":"Pago"}</button></span></div>`).join("")}
+    ${s.inst.map((i,n)=>`<div class="inst"><span>${n+1}ª · ${fmt(i.d)} · ${money(i.v)} <span class="chip ${status(i)}">${i.paid?"pago":status(i)==="bad"?"atrasada":"aberta"}</span></span><span class="row" style="gap:6px">${i.paid?`<button class="g" onclick="proofForm('${s.id}',${n})">${getProof(s.id,n)?"🧾":"＋🧾"}</button>`:""}${i.paid&&window.kmNexus?.managed(s)?'':`<button class="${i.paid?"g":""}" onclick="pay('${s.id}',${n})">${i.paid?"Desfazer":"Pago"}</button>`}</span></div>`).join("")}
     ${s.note?`<div class="sub" style="margin-top:6px">📝 ${esc(s.note)}</div>`:""}
     ${window.kmNexus?.managed(s)?`<div class="row">${window.kmNexus.button('edit',s.id,'Editar venda')}${window.kmNexus.button('charge',s.id,'Cadastrar cobrança')}<button class="g" onclick="printReceipt('${s.id}')">Recibo</button></div>`:`<div class="row" style="justify-content:flex-end;flex-wrap:wrap;margin-top:8px"><button onclick="printReceipt('${s.id}')">🧾 Recibo</button><button class="g" onclick="saleForm('${s.id}')">✏️ Editar venda</button><button class="r" onclick="delSale('${s.id}')">Excluir venda</button></div>`}</details>`;
   };
@@ -335,9 +338,9 @@ function sales(){
   <input type="date" aria-label="Filtrar data da venda" value="${saleDateFilter}" onchange="saleDateFilter=this.value;render()"></div>
   <details class="km-report"><summary style="cursor:pointer;font-weight:600">⚙️ Filtros avançados: período e valor</summary><div class="km-selector"><div><label>De</label><input type="date" value="${kmDateFrom}" onchange="kmDateFrom=this.value;render()"></div><div><label>Até</label><input type="date" value="${kmDateTo}" onchange="kmDateTo=this.value;render()"></div><div><label>Valor mínimo</label><input type="number" value="${kmMinPrice}" onchange="kmMinPrice=this.value;render()" placeholder="R$"></div><div><label>Valor máximo</label><input type="number" value="${kmMaxPrice}" onchange="kmMaxPrice=this.value;render()" placeholder="R$"></div></div><button class="g" style="margin-top:9px" onclick="kmDateFrom='';kmDateTo='';kmMinPrice='';kmMaxPrice='';saleDateFilter='';saleFilter='all';render()">Limpar filtros avançados</button></details><div class="mini-meta">${list.length} venda(s) encontrada(s) ${saleDateFilter?` · <a href="#" onclick="saleDateFilter='';render();return false">Limpar data</a>`:""}</div>
   ${dates.length?dates.map(d=>{const day=groups.get(d);day.sort((a,b)=>{
-    const aDone=a.inst?.length&&a.inst.every(i=>i.paid)?1:0,bDone=b.inst?.length&&b.inst.every(i=>i.paid)?1:0;
+    const aDone=saleSettled(a)?1:0,bDone=saleSettled(b)?1:0;
     return aDone-bDone; // Ordem de cadastro mantida dentro dos dois grupos.
-  });const pending=day.filter(s=>!(s.inst?.length&&s.inst.every(i=>i.paid))).length;
+  });const pending=day.filter(s=>!saleSettled(s)).length;
   const dayBilled=sumList(day,s=>s.price),dayPaid=sumList(day,paid),dayProfit=sumList(day,s=>s.price-s.cost);
   const label=d==="Sem data"?d:d.split("-").reverse().join("/");
   return`<div class="day-head"><strong>📅 ${esc(label)}</strong><small>${pending} pendente${pending===1?"":"s"} · ${day.length-pending} pago${day.length-pending===1?"":"s"}</small></div><div class="mini-meta" style="margin:-5px 3px 12px">Vendido <b>${money(dayBilled)}</b> · Recebido das vendas <b class="ok">${money(dayPaid)}</b> · Lucro bruto <b>${money(dayProfit)}</b></div>${day.map(row).join("")}`}).join(""):`<div class="empty">Nenhuma venda ainda. Toque no + para registrar.</div>`}`;
@@ -345,7 +348,7 @@ function sales(){
 // Recibo premium apenas de leitura: não modifica registros ou serviços de nuvem.
 function printReceipt(id){
   const s=S.sales.find(x=>x.id===id);if(!s)return alert("Venda não encontrada.");
-  const received=paid(s),balance=Math.max(0,s.price-received),done=Array.isArray(s.inst)&&s.inst.length>0&&s.inst.every(i=>i.paid);
+  const received=paid(s),balance=Math.max(0,s.price-received),done=saleSettled(s);
   const lines=(s.inst||[]).map((i,n)=>`<tr><td>${String(n+1).padStart(2,"0")}</td><td>${esc(fmt(i.d))}</td><td style="text-align:right">${money(i.v)}</td><td><span class="pill ${i.paid?"settled":""}">${i.paid?"Pago":"Pendente"}</span></td></tr>`).join("");
   const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Recibo • K&M Imports</title><style>
   *{box-sizing:border-box}body{margin:0;background:#080a10;color:#e9eef9;font:14px/1.55 -apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif}.toolbar{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px max(14px,calc((100vw - 730px)/2));background:rgba(7,10,16,.94);border-bottom:1px solid #25344c;backdrop-filter:blur(18px)}button{cursor:pointer;font-size:13px;font-weight:600;border:1px solid #31598e;border-radius:10px;padding:10px 14px;background:#143967;color:white}.close{background:#17202d;border-color:#36445a;font-size:21px;line-height:1;padding:8px 13px}.paper{max-width:690px;margin:25px auto 55px;background:#fff;color:#18202d;box-shadow:0 20px 90px #0008;border-radius:3px;overflow:hidden}.top{background:#080d16;color:white;padding:34px 38px 32px;position:relative}.top:after{content:"";position:absolute;bottom:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#0f2748,#357ac6,#0c2442)}.brand{font-size:30px;font-weight:900;letter-spacing:-1.6px;line-height:1}.brand span{color:#498fe5}.strap{font-size:10px;letter-spacing:3px;color:#9db2ce;text-transform:uppercase;margin-top:11px}.top-row{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}.doc-label{text-align:right;font-size:10px;letter-spacing:1.7px;color:#a5b6ca}.doc-label b{display:block;color:white;font-size:13px;letter-spacing:.7px;margin-top:5px}.body{padding:32px 38px 34px}.eyebrow{color:#476993;letter-spacing:2px;font-size:10px;font-weight:800;text-transform:uppercase}.title{font-weight:800;font-size:22px;letter-spacing:-.6px;margin:6px 0 26px}.headline{display:grid;grid-template-columns:1fr 1fr;gap:24px}.label{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#8290a3}.value{font-size:14px;font-weight:700;overflow-wrap:anywhere;margin-top:3px}.value.small{font-size:12px}.block{margin-top:26px;border-top:1px solid #e5eaf2;padding-top:20px}h2{font-size:11px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#667993;margin:0 0 14px}.line{display:flex;justify-content:space-between;gap:18px;align-items:baseline;margin:10px 0}.line span:first-child{color:#6c788b}.line strong{text-align:right;overflow-wrap:anywhere}.product{background:#f2f5f9;border-left:3px solid #1b528c;border-radius:2px;padding:15px;margin-top:10px}.product strong{font-size:15px}.columns{display:grid;grid-template-columns:1fr 1fr;gap:14px}table{border-collapse:collapse;width:100%;font-size:12px}th{color:#65768d;text-align:left;font-size:10px;letter-spacing:.7px;text-transform:uppercase}th,td{padding:11px 7px;border-bottom:1px solid #e5eaf2}th:first-child,td:first-child{padding-left:0}.pill{display:inline-block;padding:4px 8px;border-radius:20px;color:#9b6b21;background:#fff4e2;font-size:10px;font-weight:800}.pill.settled{color:#28775d;background:#e4f7ee}.totalbox{margin-top:24px;background:#081321;color:white;padding:22px;border-radius:4px}.totalbox .line span:first-child{color:#b0c0d4}.grand{font-size:25px;font-weight:800}.state{font-size:11px;font-weight:800;letter-spacing:1px;color:${done?"#66dbb0":"#f9c775"}}.foot{border-top:1px solid #e8edf4;margin-top:28px;padding-top:15px;font-size:10px;color:#7d8a9c}.obs{font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}.watermark{letter-spacing:2px;font-size:10px;color:#9da9bb;margin-top:8px}@media(max-width:600px){.paper{margin:12px 8px 36px}.top{padding:26px 22px}.body{padding:25px 22px}.brand{font-size:26px}.headline{gap:16px}.columns{grid-template-columns:1fr}table{font-size:11px}th,td{padding:9px 3px}.doc-label{font-size:9px}}@media print{@page{size:A4;margin:12mm}body{background:#fff}.toolbar{display:none}.paper{margin:0;box-shadow:none;max-width:none;border-radius:0;print-color-adjust:exact;-webkit-print-color-adjust:exact}.top{print-color-adjust:exact;-webkit-print-color-adjust:exact}.totalbox{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
@@ -764,7 +767,7 @@ function receipts(){
   return `<div class="section-top"><h1>▤ Histórico de recibos</h1><button class="g" onclick="go('more')">Voltar</button></div>
   <div class="sub">Recibos reemitidos das vendas cadastradas. Nenhuma cópia nova é salva.</div><input id="receiptSearch" style="margin:12px 0" placeholder="Buscar cliente, produto, data ou valor" value="${esc(receiptSearch)}" oninput="receiptSearch=this.value;render();const e=$('receiptSearch');e.focus();e.setSelectionRange(e.value.length,e.value.length)">
   <div class="mini-meta">${list.length} registro(s) disponível(is)</div>
-  ${list.map(s=>{const p=paid(s),done=s.inst?.length&&s.inst.every(i=>i.paid);return `<div class="card item receipt-card"><div class="grow"><b>${esc(s.client||"Sem nome")}</b><div class="sub">${esc(s.name)} · ${dateHuman(s.date)}</div><div class="sub">${money(s.price)} · <span class="${done?"ok":"warn"}">${done?"Quitado":`Recebido ${money(p)}`}</span></div></div><div style="display:grid;gap:5px"><button onclick="printReceipt('${s.id}')">🧾 Abrir</button><button class="g" onclick="kmReceiptShare('${s.id}')">Compartilhar PDF</button></div></div>`}).join("")||`<div class="empty">Nenhum recibo encontrado.</div>`}`;
+  ${list.map(s=>{const p=paid(s),done=saleSettled(s);return `<div class="card item receipt-card"><div class="grow"><b>${esc(s.client||"Sem nome")}</b><div class="sub">${esc(s.name)} · ${dateHuman(s.date)}</div><div class="sub">${money(s.price)} · <span class="${done?"ok":"warn"}">${done?"Quitado":`Recebido ${money(p)}`}</span></div></div><div style="display:grid;gap:5px"><button onclick="printReceipt('${s.id}')">🧾 Abrir</button><button class="g" onclick="kmReceiptShare('${s.id}')">Compartilhar PDF</button></div></div>`}).join("")||`<div class="empty">Nenhum recibo encontrado.</div>`}`;
 }
 
 
@@ -779,7 +782,7 @@ const kmPercent=(n,d)=>d?100*n/d:0;
 const kmDate=d=>d?new Date(d+"T12:00:00"):new Date(0);
 const kmShort=d=>d?dateHuman(d).slice(0,5):"—";
 const kmQuantity=p=>Math.max(0,kmNum(p.stock));
-const kmSaleDone=s=>(s.inst||[]).length>0&&(s.inst||[]).every(i=>i.paid);
+const kmSaleDone=saleSettled;
 const kmPaid=s=>sumList((s.inst||[]).filter(i=>i.paid),i=>i.v);
 const kmLastSale=p=>{const a=S.sales.filter(s=>s.pid===p.id).map(s=>s.date).filter(Boolean).sort();return a.length?kmDate(a.at(-1)).getTime():0};
 const kmStockTotal=()=>({units:sumList(S.products,kmQuantity),cost:sumList(S.products,p=>kmQuantity(p)*kmNum(p.cost)),revenue:sumList(S.products,p=>kmQuantity(p)*kmNum(p.price)),critical:S.products.filter(p=>kmQuantity(p)<=kmCritical).length});
