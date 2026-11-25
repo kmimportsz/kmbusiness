@@ -1,94 +1,117 @@
-// Insert inside the existing match /databases/{database}/documents block.
-// The operator documents are provisioned by the project administrator through IAM.
-function nexusOperator() {
-  return request.auth != null
-    && get(/databases/$(database)/documents/nexusOperators/$(request.auth.uid)).data.active == true;
-}
-match /nexusOperators/{uid} {
-  allow read, write: if false;
-}
-match /nexusOrders/{orderId} {
-  allow read: if nexusOperator();
-  allow update: if nexusOperator()
-    && resource.data.status == 'pending'
-    && request.resource.data.decidedBy == request.auth.uid
-    && request.resource.data.decidedAt is string
-    && (
-      (
-        request.resource.data.status == 'cancelled'
-        && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['status', 'decidedBy', 'decidedAt'])
-      ) || (
-        request.resource.data.status == 'confirmed'
-        && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['status', 'decidedBy', 'decidedAt', 'saleId', 'confirmedShippingCents'])
-        && request.resource.data.confirmedShippingCents is int
-        && request.resource.data.confirmedShippingCents >= 0
-        && (resource.data.shippingCents == null
-          || request.resource.data.confirmedShippingCents == resource.data.shippingCents)
-        && request.resource.data.saleId == 'pedido-' + orderId
-        && !exists(/databases/$(database)/documents/sales/$(request.resource.data.saleId))
-        && existsAfter(/databases/$(database)/documents/sales/$(request.resource.data.saleId))
-        && getAfter(/databases/$(database)/documents/sales/$(request.resource.data.saleId)).data.orderId == orderId
-        && getAfter(/databases/$(database)/documents/sales/$(request.resource.data.saleId)).data.source == 'catalog'
-        && getAfter(/databases/$(database)/documents/sales/$(request.resource.data.saleId)).data.inst == []
-      )
-    );
-}
+// Complete candidate. Replace the two placeholders with the current production allowlist before staging.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function legacyAdministrator() {
+      return request.auth != null
+        && request.auth.token.get('email', '') in ['__ADMIN_EMAIL_1__', '__ADMIN_EMAIL_2__'];
+    }
+    match /{rootCollection}/{document=**} {
+      allow read, write: if legacyAdministrator()
+        && !(rootCollection in ['nexusOperators', 'nexusOrders', 'sales']);
+    }
+    match /sales/{saleId} {
+      // The existing client subscribes to the whole collection. Keep reads for both administrators.
+      allow read: if legacyAdministrator();
+      allow create, update: if legacyAdministrator()
+        && (!nexusManagedSaleId(saleId) || nexusManagedSaleWrite(saleId));
+      allow delete: if legacyAdministrator() && !nexusManagedSaleId(saleId);
+    }
+    match /sales/{saleId}/{subcollection}/{document=**} {
+      allow read, write: if legacyAdministrator() && !nexusManagedSaleId(saleId);
+    }
 
-// Use these predicates in the existing /sales/{saleId} rules. Firestore combines
-// matching permissions with OR, so a broad legacy writer must explicitly exclude these IDs.
-function nexusManagedSaleId(saleId) {
-  return saleId.matches('^(pedido|manual)-[A-Za-z0-9_-]+$');
-}
-function nexusChargeValid(charge) {
-  return charge is map && charge.id is string
-    && charge.v is number && charge.v > 0
-    && charge.d is string && charge.d.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
-    && charge.paid is bool
-    && ((!charge.paid && charge.pd == null)
-      || (charge.paid && charge.pd is string && charge.pd.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')));
-}
-function nexusSaleRevision(next, prior, audit) {
-  let onlyCharges = next.diff(prior).affectedKeys().hasOnly(['inst','revision','updatedAt','events']);
-  return audit.actor == request.auth.uid
-    && (
-      (audit.label == 'Venda revisada' && next.inst == prior.inst)
-      || (onlyCharges && audit.chargeIndex is int && audit.chargeIndex >= 0
-        && audit.chargeIndex < next.inst.size() && nexusChargeValid(next.inst[audit.chargeIndex])
+    // The operator documents are provisioned by the project administrator through IAM.
+    function nexusOperator() {
+      return legacyAdministrator()
+        && get(/databases/$(database)/documents/nexusOperators/$(request.auth.uid)).data.active == true;
+    }
+    match /nexusOperators/{uid} {
+      allow read, write: if false;
+    }
+    match /nexusOrders/{orderId} {
+      allow read: if nexusOperator();
+      allow update: if nexusOperator()
+        && resource.data.status == 'pending'
+        && request.resource.data.decidedBy == request.auth.uid
+        && request.resource.data.decidedAt is string
         && (
-          (audit.label == 'Cobrança registrada'
-            && audit.chargeIndex == prior.inst.size() && next.inst.size() == prior.inst.size() + 1
-            && next.inst.removeAll([next.inst[audit.chargeIndex]]) == prior.inst)
-          || (audit.label == 'Cobrança revisada' && next.inst.size() == prior.inst.size()
-            && prior.inst[audit.chargeIndex].paid == false
-            && next.inst[audit.chargeIndex].id == prior.inst[audit.chargeIndex].id
-            && next.inst.removeAll([next.inst[audit.chargeIndex]]) == prior.inst.removeAll([prior.inst[audit.chargeIndex]]))
-        ))
-    );
-}
-function nexusManagedSaleWrite(saleId) {
-  let next = request.resource.data;
-  return nexusOperator()
-    && next.id == saleId
-    && next.items is list && next.items.size() > 0 && next.items.size() <= 30
-    && next.inst is list && next.events is list && next.revision is int
-    && (
-      (!exists(/databases/$(database)/documents/sales/$(saleId))
-        && next.revision == 1 && next.inst.size() == 0 && next.events.size() == 1
+          (
+            request.resource.data.status == 'cancelled'
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['status', 'decidedBy', 'decidedAt'])
+          ) || (
+            request.resource.data.status == 'confirmed'
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['status', 'decidedBy', 'decidedAt', 'saleId', 'confirmedShippingCents'])
+            && request.resource.data.confirmedShippingCents is int
+            && request.resource.data.confirmedShippingCents >= 0
+            && (resource.data.shippingCents == null
+              || request.resource.data.confirmedShippingCents == resource.data.shippingCents)
+            && request.resource.data.saleId == 'pedido-' + orderId
+            && !exists(/databases/$(database)/documents/sales/$(request.resource.data.saleId))
+            && existsAfter(/databases/$(database)/documents/sales/$(request.resource.data.saleId))
+            && getAfter(/databases/$(database)/documents/sales/$(request.resource.data.saleId)).data.orderId == orderId
+            && getAfter(/databases/$(database)/documents/sales/$(request.resource.data.saleId)).data.source == 'catalog'
+            && getAfter(/databases/$(database)/documents/sales/$(request.resource.data.saleId)).data.inst == []
+          )
+        );
+    }
+
+    // Reserve precisely the IDs the PR client uses for managed sales.
+    function nexusManagedSaleId(saleId) {
+      return saleId.matches('^(pedido|manual)-[A-Za-z0-9_-]+$');
+    }
+    function nexusChargeValid(charge) {
+      return charge is map && charge.id is string
+        && charge.v is number && charge.v > 0
+        && charge.d is string && charge.d.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && charge.paid is bool
+        && ((!charge.paid && charge.pd == null)
+          || (charge.paid && charge.pd is string && charge.pd.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')));
+    }
+    function nexusSaleRevision(next, prior, audit) {
+      let onlyCharges = next.diff(prior).affectedKeys().hasOnly(['inst','revision','updatedAt','events']);
+      return audit.actor == request.auth.uid
         && (
-          (saleId.matches('^manual-.*') && next.source == 'manual') ||
-          (saleId == 'pedido-' + next.orderId && next.source == 'catalog'
-            && getAfter(/databases/$(database)/documents/nexusOrders/$(next.orderId)).data.saleId == saleId
-            && getAfter(/databases/$(database)/documents/nexusOrders/$(next.orderId)).data.status == 'confirmed')
-        )
-      ) ||
-      (exists(/databases/$(database)/documents/sales/$(saleId))
-        && next.revision == resource.data.revision + 1
-        && next.events.size() == resource.data.events.size() + 1
-        && next.events.removeAll([next.events[next.events.size() - 1]]) == resource.data.events
-        && nexusSaleRevision(next, resource.data, next.events[next.events.size() - 1])
-        && !next.diff(resource.data).affectedKeys().hasAny(['id', 'source', 'orderId', 'orderCode', 'createdAt'])
-      )
-    );
+          (audit.label == 'Venda revisada' && next.inst == prior.inst)
+          || (onlyCharges && audit.chargeIndex is int && audit.chargeIndex >= 0
+            && audit.chargeIndex < next.inst.size() && nexusChargeValid(next.inst[audit.chargeIndex])
+            && (
+              (audit.label == 'Cobrança registrada'
+                && audit.chargeIndex == prior.inst.size() && next.inst.size() == prior.inst.size() + 1
+                && next.inst.removeAll([next.inst[audit.chargeIndex]]) == prior.inst)
+              || (audit.label == 'Cobrança revisada' && next.inst.size() == prior.inst.size()
+                && prior.inst[audit.chargeIndex].paid == false
+                && next.inst[audit.chargeIndex].id == prior.inst[audit.chargeIndex].id
+                && next.inst.removeAll([next.inst[audit.chargeIndex]]) == prior.inst.removeAll([prior.inst[audit.chargeIndex]]))
+            ))
+        );
+    }
+    function nexusManagedSaleWrite(saleId) {
+      let next = request.resource.data;
+      return nexusOperator()
+        && next.id == saleId
+        && next.items is list && next.items.size() > 0 && next.items.size() <= 30
+        && next.inst is list && next.events is list && next.revision is int
+        && (
+          (!exists(/databases/$(database)/documents/sales/$(saleId))
+            && next.revision == 1 && next.inst.size() == 0 && next.events.size() == 1
+            && (
+              (saleId.matches('^manual-.*') && next.source == 'manual') ||
+              (saleId == 'pedido-' + next.orderId && next.source == 'catalog'
+                && getAfter(/databases/$(database)/documents/nexusOrders/$(next.orderId)).data.saleId == saleId
+                && getAfter(/databases/$(database)/documents/nexusOrders/$(next.orderId)).data.status == 'confirmed')
+            )
+          ) ||
+          (exists(/databases/$(database)/documents/sales/$(saleId))
+            && next.revision == resource.data.revision + 1
+            && next.events.size() == resource.data.events.size() + 1
+            && next.events.removeAll([next.events[next.events.size() - 1]]) == resource.data.events
+            && nexusSaleRevision(next, resource.data, next.events[next.events.size() - 1])
+            && !next.diff(resource.data).affectedKeys().hasAny(['id', 'source', 'orderId', 'orderCode', 'createdAt'])
+          )
+        );
+    }
+  }
 }

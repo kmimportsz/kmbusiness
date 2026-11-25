@@ -7,7 +7,7 @@ A autorização do proprietário está registrada. Os acessos disponíveis nesta
 1. No console Firebase/Google Cloud, selecione um projeto **de homologação** separado. Informe apenas o ID do projeto e o nome do banco. Confirme que está vazio ou contém somente dados de teste.
 2. Em **Google Cloud → IAM e administrador → IAM**, conceda à identidade de homologação temporária leitura dos rulesets e, se a instalação das regras candidatas for feita pela automação, edição de regras **apenas nesse projeto**. O operador Firebase Auth de teste precisa de seu UID em `nexusOperators/{uid}` com `active: true`.
 3. Para o Worker, configure uma conta de serviço exclusiva de homologação. Conceda as operações de leitura e criação de documentos de que o endpoint precisa, com escopo limitado ao projeto isolado. Configure a credencial diretamente como segredo no painel do Worker/Sites. Para a ferramenta de homologação, vincule a identidade autorizada pelo mecanismo de credenciais do ambiente; mantenha chaves e tokens fora do chat e do Git.
-4. A base candidata precisa ser validada com as regras finais completas. Na produção, a revisão exige somente leitura das regras vigentes antes de preparar qualquer mudança.
+4. Use a [candidata completa](NEXUS-REVISAO-FIRESTORE.md) no ambiente isolado. Na produção, a revisão exige somente leitura das regras vigentes antes de preparar qualquer mudança.
 
 ## Worker e catálogo isolados
 

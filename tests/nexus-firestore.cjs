@@ -3,21 +3,22 @@ const {readFileSync}=require('node:fs');
 const assert=require('node:assert/strict');
 const vm=require('node:vm');
 const {initializeTestEnvironment,assertFails}=require('@firebase/rules-unit-testing');
-const {doc,getDoc,setDoc,collection,onSnapshot,runTransaction}=require('firebase/firestore');
+const {doc,getDoc,getDocs,setDoc,deleteDoc,collection,onSnapshot,runTransaction}=require('firebase/firestore');
 
 async function run(){
  const endpoint=/^(127\.0\.0\.1|localhost):(\d+)$/.exec(process.env.FIRESTORE_EMULATOR_HOST||'');
  if(!endpoint)throw Error('Use FIRESTORE_EMULATOR_HOST=127.0.0.1:<porta local>.');
- const rules=readFileSync('firestore/nexus-orders.rules','utf8');
- const environment=await initializeTestEnvironment({projectId:'demo-nexus',firestore:{host:endpoint[1],port:Number(endpoint[2]),rules:
-  'rules_version = \'2\'; service cloud.firestore { match /databases/{database}/documents { '+rules+
-  ' match /sales/{id} { allow read: if nexusOperator(); allow write: if nexusOperator() && (!nexusManagedSaleId(id) || nexusManagedSaleWrite(id)); }'+
-  ' match /{collection}/{id} { allow read, write: if nexusOperator() && collection in [\'products\',\'config\']; } }}'}});
+ const emails=['admin-one@example.invalid','admin-two@example.invalid'];
+ const rules=readFileSync('firestore/nexus-orders.rules','utf8')
+  .replace('__ADMIN_EMAIL_1__',emails[0]).replace('__ADMIN_EMAIL_2__',emails[1]);
+ const environment=await initializeTestEnvironment({projectId:'demo-nexus',firestore:{host:endpoint[1],port:Number(endpoint[2]),rules}});
  const {JSDOM}=require('jsdom');
  const page=new JSDOM('<button data-nexus-count></button><div id="modal"></div>',{runScripts:'outside-only'});
  try{
   await environment.clearFirestore();
-  const store=environment.authenticatedContext('operator').firestore();
+  const store=environment.authenticatedContext('operator',{email:emails[0]}).firestore();
+  const secondAdmin=environment.authenticatedContext('second-admin',{email:emails[1]}).firestore();
+  const legacyOnly=environment.authenticatedContext('legacy-only',{email:emails[1]}).firestore();
   const ref=(table,id)=>doc(store,table,id);
   const order={status:'pending',code:'A'.repeat(32),customer:'Pessoa Teste',createdAt:'2026-11-25T12:00:00.000Z',
    items:[{id:'camiseta',brand:'Marca Teste',model:'Camiseta A',size:'M',quantity:2,priceCents:8000}],notes:'',
@@ -26,6 +27,8 @@ async function run(){
    const db=context.firestore();
    await Promise.all([
     setDoc(doc(db,'nexusOperators','operator'),{active:true}),
+    setDoc(doc(db,'nexusOperators','second-admin'),{active:true}),
+    setDoc(doc(db,'nexusOperators','unlisted'),{active:true}),
     setDoc(doc(db,'products','camiseta'),{name:'Camiseta A',stock:7,cost:38,catalogId:'camiseta'}),
     setDoc(doc(db,'sales','historical'),{id:'historical',price:42,inst:[{v:42,paid:true}]}),
     ...['first','second','third'].map(id=>setDoc(doc(db,'nexusOrders',id),order))
@@ -64,6 +67,32 @@ async function run(){
   await assertFails(getDoc(doc(nonOperator,'nexusOrders','first')));
   await assertFails(setDoc(doc(nonOperator,'nexusOperators','other'),{active:true}));
   await assertFails(setDoc(ref('nexusOrders','untrusted'),order));
+  const unlisted=environment.authenticatedContext('unlisted',{email:'unlisted@example.invalid'}).firestore();
+  await assertFails(getDoc(doc(unlisted,'nexusOrders','first')));
+  await assertFails(getDoc(doc(unlisted,'products','camiseta')));
+  await assertFails(getDoc(doc(legacyOnly,'nexusOrders','first')));
+  assert.equal((await getDocs(collection(legacyOnly,'sales'))).size,1);
+  assert.equal((await getDocs(collection(secondAdmin,'nexusOrders'))).size,4);
+  for(const admin of [store,secondAdmin]){
+   for(const table of ['products','sales','catalog','cphotos','expenses','closings','config','proofs']){
+    const legacy=doc(admin,table,'legacy-permission-check');
+    await setDoc(legacy,{value:1});await setDoc(legacy,{value:2});
+    assert.equal((await getDoc(legacy)).data().value,2);
+    await deleteDoc(legacy);
+   }
+   await assertFails(getDoc(doc(admin,'nexusOperators','operator')));
+   await assertFails(setDoc(doc(admin,'nexusOperators','self-grant'),{active:true}));
+   await assertFails(setDoc(doc(admin,'nexusOperators','operator','nested','x'),{active:true}));
+   await assertFails(setDoc(doc(admin,'nexusOrders','first','nested','x'),{status:'confirmed'}));
+   await assertFails(deleteDoc(doc(admin,'nexusOrders','first')));
+   await assertFails(setDoc(doc(admin,'sales','pedido-first'),{id:'pedido-first',source:'catalog',orderId:'first'}));
+  }
+  const legacyNested=doc(secondAdmin,'sales','historical','notes','compatibility');
+  await setDoc(legacyNested,{text:'fixture'});
+  assert.equal((await getDoc(legacyNested)).data().text,'fixture');
+  await deleteDoc(legacyNested);
+  await assertFails(setDoc(doc(anon,'products','camiseta'),{stock:1}));
+  await assertFails(setDoc(doc(unlisted,'sales','historical'),{price:1}));
   const original=await getDoc(ref('sales','historical'));
   const db={
    collection(name){return {
@@ -98,6 +127,9 @@ async function run(){
   await count(2);
   const sale=(await getDoc(ref('sales','pedido-first'))).data();
   assert.deepEqual(sale.inst,[]);
+  assert.ok((await getDocs(collection(secondAdmin,'sales'))).docs.some(d=>d.id===sale.id));
+  await assertFails(deleteDoc(doc(secondAdmin,'sales',sale.id)));
+  await assertFails(setDoc(doc(secondAdmin,'sales',sale.id,'nested','x'),{x:1}));
   assert.equal(sale.price,175);
   assert.equal(sale.cost,76);
   assert.equal((await getDoc(ref('products','camiseta'))).data().stock,5);
@@ -135,6 +167,10 @@ async function run(){
   assert.equal(revised.cost,38);
   assert.equal((await getDoc(ref('products','camiseta'))).data().stock,6);
   assert.deepEqual((await getDoc(ref('sales','historical'))).data(),original.data());
+  const cancelThird={...order,status:'cancelled',decidedBy:'second-admin',decidedAt:'2026-11-25T12:01:00.000Z'};
+  await assertFails(setDoc(doc(legacyOnly,'nexusOrders','third'),{...cancelThird,decidedBy:'legacy-only'}));
+  await setDoc(doc(secondAdmin,'nexusOrders','third'),cancelThird);
+  await count(0);
   context.unsubs.forEach(fn=>fn());
   console.log('PASS emulador: regras, contador, confirmação e cancelamento concorrentes, retry, estoque, edição concorrente, recebimento e histórico.');
  }finally{page.window.close();await environment.cleanup()}
