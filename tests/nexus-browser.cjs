@@ -7,7 +7,10 @@ const fs=require('node:fs');
   executablePath:process.env.KM_CHROMIUM_PATH||undefined,headless:true,args:['--no-sandbox']
  });
  const origin='http://127.0.0.1:8855';
- const stock={products:[{id:'camiseta',brand:'Marca fictícia',model:'Camiseta A',size:'M',price:80,photo:'/images/one',measurements:[{label:'Comprimento',value:64,unit:'cm'}]}],phone:'5511999999999'};
+ const stock={products:[
+  {id:'camiseta',brand:'Marca fictícia',model:'Camiseta A',size:'M',price:80,photo:'/images/one',measurements:[{label:'Comprimento',value:64,unit:'cm'}]},
+  {id:'outra',brand:'Marca fictícia',model:'Regata B',size:'G',price:45,photo:'/images/one'},
+  {id:'esgotada',brand:'Marca fictícia',model:'Camiseta Z',size:'P',price:65,photo:'/images/one',available:false}],phone:'5511999999999'};
  const output=process.env.KM_EVIDENCE_DIRECTORY||require('node:os').tmpdir()+'/km-nexus-'+engine;
  fs.mkdirSync(output,{recursive:true});
  for(const [label,width,height,reducedMotion] of [['mobile',320,740,'no-preference'],['desktop',1280,830,'no-preference'],['reduced',390,800,'reduce']]){
@@ -50,13 +53,54 @@ const fs=require('node:fs');
   assert.equal(await page.locator('#catalogMeasurementGuide').getAttribute('hidden'),null);
   await page.locator('#closeProductDetails').click();
   await page.locator('#showCatalogFavorites').click();
-  await page.locator('#grid [data-select="camiseta"]').click();
+  await page.locator('#search').clear();
+  await page.locator('#dockHome').focus();
+  const addition=await page.evaluate(()=>{
+   const click=selector=>document.querySelector(selector).click();
+   click('#grid [data-select="camiseta"]');
+   click('#grid [data-catalog-qty="camiseta"][data-dir="1"]');
+   click('#grid [data-select="outra"]');
+   const count=document.querySelector('#dockCartCount'),pulse=document.querySelector('#dockBagPulse');
+   const unavailable=[...document.querySelectorAll('#grid .select[disabled]')].find(b=>b.getAttribute('aria-label').includes('Camiseta Z'));
+   unavailable.click();
+   return {count:count.textContent,announcement:document.querySelector('#dockCartStatus').textContent,
+    flights:document.querySelectorAll('.catalog-bag-flight').length,pulse:pulse.getAnimations().length,badge:count.getAnimations().length};
+  });
+  assert.equal(addition.count,'3');
+  assert.equal(await page.locator('#cartCount').textContent(),'3');
+  assert.match(addition.announcement,/3 unidades/);
+  if(reducedMotion==='reduce')assert.deepEqual([addition.flights,addition.pulse,addition.badge],[0,0,0]);
+  else assert.deepEqual([addition.flights>0,addition.pulse===1,addition.badge===1],[true,true,true]);
+  if(label==='mobile'){
+   await page.locator('#grid [data-catalog-qty="outra"][data-dir="-1"]').click();
+   await page.locator('#grid [data-catalog-qty="camiseta"][data-dir="-1"]').click();
+   await page.reload();
+   await page.waitForFunction(()=>document.querySelector('#dockCartCount')?.textContent==='1');
+   assert.equal(await page.locator('#dockCartCount').textContent(),'1');
+  }else{
+   await page.locator('#grid [data-catalog-qty="outra"][data-dir="-1"]').click();
+   await page.locator('#grid [data-catalog-qty="camiseta"][data-dir="-1"]').click();
+  }
   assert.equal(await page.locator('#dockCartCount').textContent(),'1');
   const dockRatio=(await page.locator('#checkout').boundingBox()).width/width;
   if(width<500)assert.ok(dockRatio>=.75&&dockRatio<=.8);
   assert.ok(await page.locator('#checkout button').evaluateAll(buttons=>buttons.every(b=>b.offsetWidth>=44&&b.offsetHeight>=44)));
   if(label==='mobile'){
    await page.screenshot({path:output+'/mobile-menu.png'});
+   const add=page.locator('#grid [data-catalog-qty="camiseta"][data-dir="1"]');
+   await add.scrollIntoViewIfNeeded();
+   await page.evaluate(()=>{
+    document.querySelector('#grid [data-catalog-qty="camiseta"][data-dir="1"]').click();
+    window.interactionAnimations=[...document.querySelectorAll('.catalog-bag-flight,#dockBagPulse,#dockCartCount')]
+     .flatMap(el=>el.getAnimations()).filter(animation=>animation.playState==='running');
+    window.interactionAnimations.forEach(animation=>animation.pause());
+   });
+   for(let i=0;i<10;i++){
+    await page.evaluate(t=>window.interactionAnimations.forEach(animation=>{animation.currentTime=t}),i*37);
+    await page.screenshot({path:output+'/bag-'+String(i).padStart(2,'0')+'.png'});
+   }
+   await page.evaluate(()=>window.interactionAnimations.forEach(animation=>animation.finish()));
+   await page.locator('#grid [data-catalog-qty="camiseta"][data-dir="-1"]').click();
    for(let i=0;i<16;i++){
     await page.screenshot({path:output+'/dock-'+String(i).padStart(2,'0')+'.png'});
     await page.waitForTimeout(90);
@@ -64,6 +108,8 @@ const fs=require('node:fs');
   }
   await page.locator('#send').click();
   await page.locator('#summaryItems [data-remove]').click();
+  assert.notEqual(await page.locator('#dockCartCount').getAttribute('hidden'),null);
+  assert.equal(await page.locator('#dockCartStatus').textContent(),'Sacola vazia.');
   await page.locator('#undoBagRemoval').click();
   assert.equal(await page.locator('#dockCartCount').textContent(),'1');
   await page.locator('#customerName').fill('Pessoa Teste');
@@ -104,7 +150,78 @@ const fs=require('node:fs');
   assert.equal(await page.evaluate(()=>localStorage.getItem('km.catalog.remembered-name.v1')),'Pessoa Teste');
   await page.locator('#nexusBack').click();
   assert.equal(await page.locator('#summaryDialog').evaluate(el=>el.open),false);
+  await page.locator('#send').click();
+  await page.locator('#clearChoices').click();
+  assert.notEqual(await page.locator('#dockCartCount').getAttribute('hidden'),null);
+  assert.equal(await page.locator('#dockCartStatus').textContent(),'Sacola vazia.');
   assert.ifError(error);
+  await page.close();
+ }
+ if(engine==='chromium'){
+  const page=await browser.newPage({viewport:{width:1280,height:830}});
+  await page.route('**/*',route=>{
+   const url=new URL(route.request().url());
+   if(url.origin===origin)return route.continue();
+   if(url.pathname==='/api/catalog')return route.fulfill({json:stock});
+   return route.abort();
+  });
+  await page.addInitScript(()=>{
+   const users={uid:'operator',email:'operator@example.invalid'};
+   const state={
+    products:{camiseta:{id:'camiseta',name:'Camiseta A',brand:'Marca fictícia',stock:5,cost:38,catalogId:'camiseta'}},
+    sales:{},catalog:{},cphotos:{},expenses:{},closings:{},config:{},proofs:{},
+    nexusOrders:{test:{code:'A'.repeat(32),status:'pending',customer:'Pessoa Teste',createdAt:'2026-11-25T12:00:00.000Z',
+     items:[{id:'camiseta',brand:'Marca fictícia',model:'Camiseta A',size:'M',quantity:1,priceCents:8000}],
+     subtotalCents:8000,shippingCents:0,mode:'pickup',notes:''}}
+   };
+   const listeners={};
+   function snapshot(name){
+    const docs=Object.entries(state[name]||{}).map(([id,value])=>({id,data:()=>structuredClone(value)}));
+    return {docs,forEach:fn=>docs.forEach(fn),metadata:{fromCache:false}};
+   }
+   function emit(name){setTimeout(()=>listeners[name]?.forEach(fn=>fn(snapshot(name))),0)}
+   const cloud={
+    enablePersistence:async()=>{},
+    collection(name){return {
+     doc(id){return {name,id,set:async value=>{state[name][id]=value;emit(name)},delete:async()=>{delete state[name][id];emit(name)}}},
+     onSnapshot(opts,callback){
+      const fn=typeof opts==='function'?opts:callback;
+      (listeners[name]??=new Set()).add(fn);
+      setTimeout(()=>fn(snapshot(name)),0);
+      return ()=>listeners[name].delete(fn);
+     }
+    }},
+    async runTransaction(fn){
+     const changes=[];
+     await fn({
+      async get(ref){const row=state[ref.name][ref.id];return {exists:!!row,data:()=>structuredClone(row)}},
+      set(ref,value){changes.push(()=>{state[ref.name][ref.id]=value;emit(ref.name)})},
+      update(ref,delta){changes.push(()=>{Object.assign(state[ref.name][ref.id],delta);emit(ref.name)})}
+     });
+     changes.forEach(change=>change());
+    }
+   };
+   window.firebase={initializeApp(){},auth:()=>({currentUser:users,onAuthStateChanged:fn=>setTimeout(()=>fn(users),10)}),firestore:()=>cloud};
+   window.kmBrowserFixture=state;
+  });
+  await page.goto(origin+'/');
+  const orders=page.locator('.v-side-links [data-visual="orders"]');
+  await orders.getByText('(1)',{exact:true}).waitFor();
+  await orders.click();
+  await page.locator('#nexusOrdersPanel details summary').click();
+  await page.screenshot({path:output+'/business-pedidos.png'});
+  await page.locator('#nexusOrdersPanel [data-nexus-action="confirm"]').click();
+  await page.locator('#nexusForm button').first().click();
+  await page.waitForFunction(()=>window.kmBrowserFixture.sales['pedido-test']);
+  const result=await page.evaluate(()=>({sale:window.kmBrowserFixture.sales['pedido-test'],stock:window.kmBrowserFixture.products.camiseta.stock}));
+  assert.equal(result.stock,4);assert.equal(result.sale.price,80);assert.deepEqual(result.sale.inst,[]);
+  await page.locator('.v-side-links [data-visual="sales"]').click();
+  await page.locator('#app details summary').filter({hasText:'Pessoa Teste'}).click();
+  await page.locator('#app [data-nexus-action="charge"]').click();
+  await page.locator('#nexusForm [name=amount]').fill('25');
+  await page.locator('#nexusForm [name=due]').fill('2027-01-20');
+  await page.locator('#nexusForm button').first().click();
+  await page.waitForFunction(()=>window.kmBrowserFixture.sales['pedido-test'].inst.length===1);
   await page.close();
  }
  await browser.close();
