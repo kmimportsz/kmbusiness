@@ -1,0 +1,37 @@
+// Insert inside the existing match /databases/{database}/documents block.
+// The operator documents are provisioned by the project administrator through IAM.
+function nexusOperator() {
+  return request.auth != null
+    && exists(/databases/$(database)/documents/nexusOperators/$(request.auth.uid));
+}
+match /nexusOperators/{uid} {
+  allow read, write: if false;
+}
+match /nexusOrders/{orderId} {
+  allow read: if nexusOperator();
+  allow update: if nexusOperator()
+    && resource.data.status == 'pending'
+    && request.resource.data.decidedBy == request.auth.uid
+    && request.resource.data.decidedAt is string
+    && (
+      (
+        request.resource.data.status == 'cancelled'
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'decidedBy', 'decidedAt'])
+      ) || (
+        request.resource.data.status == 'confirmed'
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'decidedBy', 'decidedAt', 'saleId', 'confirmedShippingCents'])
+        && request.resource.data.confirmedShippingCents is int
+        && request.resource.data.confirmedShippingCents >= 0
+        && (resource.data.shippingCents == null
+          || request.resource.data.confirmedShippingCents == resource.data.shippingCents)
+        && request.resource.data.saleId == 'pedido-' + orderId
+        && !exists(/databases/$(database)/documents/sales/$(request.resource.data.saleId))
+        && existsAfter(/databases/$(database)/documents/sales/$(request.resource.data.saleId))
+        && getAfter(/databases/$(database)/documents/sales/$(request.resource.data.saleId)).data.orderId == orderId
+        && getAfter(/databases/$(database)/documents/sales/$(request.resource.data.saleId)).data.source == 'catalog'
+        && getAfter(/databases/$(database)/documents/sales/$(request.resource.data.saleId)).data.inst == []
+      )
+    );
+}

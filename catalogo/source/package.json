@@ -4,6 +4,6 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "test": "node scripts/test.mjs && node scripts/test-delivery.mjs && node scripts/test-customer-review.mjs && node scripts/test-cart.mjs && node scripts/test-customer-ux.mjs && node scripts/test-observability.mjs && node scripts/test-cart.mjs public/catalogo.html && node scripts/test-customer-ux.mjs public/catalogo.html && node scripts/check-public.mjs"
+    "test": "node scripts/test.mjs && node scripts/test-delivery.mjs && node scripts/test-customer-review.mjs && node scripts/test-cart.mjs && node scripts/test-customer-ux.mjs && node scripts/test-observability.mjs && node scripts/test-cart.mjs public/catalogo.html && node scripts/test-customer-ux.mjs public/catalogo.html && node scripts/check-public.mjs && node scripts/test-orders.mjs"
   }
 }

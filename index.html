@@ -203,14 +203,14 @@ function stats(){
 function allInst(){const a=[];S.sales.forEach(s=>s.inst.forEach((i,n)=>a.push({s,i,n})));return a}
 
 function render(){
-  $("nav").innerHTML=`<div class="topline"><div class="brandmark"><b>K&M BUSINESS</b><small>${({home:"PAINEL",cobr:"COBRANÇAS",sales:"VENDAS",prod:"ESTOQUE",more:"FERRAMENTAS",ops:"OPERAÇÕES",command:"INTELIGÊNCIA",calendar:"AGENDA",receipts:"RECIBOS",insights:"INDICADORES",km:"FINANCEIRO"})[tab]||"GESTÃO"}</small></div><button class="menu-open" aria-label="Abrir menu" aria-expanded="false" onclick="toggleMenu(true)">☰</button></div>`;
-  $("fab").style.display=(tab==="prod"||tab==="more"||["km","insights","calendar","receipts","command","ops","catalog"].includes(tab))?"none":"block";
+  $("nav").innerHTML=`<div class="topline"><div class="brandmark"><b>K&M BUSINESS</b><small>${({home:"PAINEL",cobr:"COBRANÇAS",sales:"VENDAS",orders:"PEDIDOS",prod:"ESTOQUE",more:"FERRAMENTAS",ops:"OPERAÇÕES",command:"INTELIGÊNCIA",calendar:"AGENDA",receipts:"RECIBOS",insights:"INDICADORES",km:"FINANCEIRO"})[tab]||"GESTÃO"}</small></div><button class="menu-open" aria-label="Abrir menu" aria-expanded="false" onclick="toggleMenu(true)">☰</button></div>`;
+  $("fab").style.display=(tab==="prod"||tab==="more"||["km","insights","calendar","receipts","command","ops","catalog","orders"].includes(tab))?"none":"block";
   if(tryClose())save();
-  $("app").innerHTML={home,cobr,sales,prod,more,km,insights,calendarFinance,receipts,command:kmCommand,ops:operationCenter,catalog:publicCatalogPanel}[tab]();
+  $("app").innerHTML={home,cobr,sales,prod,more,km,insights,calendarFinance,receipts,command:kmCommand,ops:operationCenter,catalog:publicCatalogPanel,orders:()=>window.kmNexus.ordersView()}[tab]();
 }
 const go=t=>{toggleMenu(false);tab=t;render();scrollTo(0,0)};
 function toggleMenu(open){const layer=$("menuOverlay"),drawer=$("menuDrawer");if(!layer||!drawer)return;layer.classList.toggle("open",!!open);document.body.style.overflow=open?"hidden":"";if(!open)return;
-const items=[["home","◈","Início"],["sales","▤","Vendas"],["cobr","◷","Cobranças"],["prod","▣","Estoque"],["catalog","▦","Catálogo"],["ops","⚡","Central de operações"],["command","◆","Visão estratégica"],["insights","▥","Indicadores por período"],["calendar","▦","Calendário financeiro"],["receipts","🧾","Recibos"],["km","📊","Inteligência financeira"],["more","⚙","Mais / Configurações"]];
+const items=[["home","◈","Início"],["sales","▤","Vendas"],["orders","▦","Pedidos"],["cobr","◷","Cobranças"],["prod","▣","Estoque"],["catalog","▦","Catálogo"],["ops","⚡","Central de operações"],["command","◆","Visão estratégica"],["insights","▥","Indicadores por período"],["calendar","▦","Calendário financeiro"],["receipts","🧾","Recibos"],["km","📊","Inteligência financeira"],["more","⚙","Mais / Configurações"]];
 drawer.innerHTML=`<div class="drawer-title"><div><b>K&M IMPORTS</b><div class="sub">Seu espaço de trabalho</div></div><button class="g" onclick="toggleMenu(false)" aria-label="Fechar menu">✕</button></div>`+items.map(([k,ic,txt])=>`<button class="drawer-link ${tab===k?"on":""}" onclick="go('${k}')"><span>${ic}</span>${txt}</button>`).join("");}
 document.addEventListener("keydown",e=>{if(e.key==="Escape")toggleMenu(false)});
 
@@ -288,9 +288,10 @@ const thumb=s=>s.img?`<img class="thumb" src="${s.img}" alt="">`:`<div class="th
 
 function cobr(){
   const f=filter,list=allInst().filter(x=>f==="paid"?x.i.paid:f==="late"?(!x.i.paid&&x.i.d<today()):!x.i.paid).sort((a,b)=>a.i.d.localeCompare(b.i.d));
-  return`<h1>Cobranças</h1><div class="row" style="margin-bottom:10px">
+  const commercial=(S.sales||[]).filter(s=>window.kmNexus?.managed(s));
+  return`<h1>Cobranças</h1>${commercial.length?`<details class="card"><summary>Cadastrar cobrança manual</summary>${commercial.map(s=>`<div class="inst"><span>${esc(s.client)} · ${esc(s.orderCode)}</span>${window.kmNexus.button('charge',s.id,'Cadastrar cobrança')}</div>`).join('')}</details>`:''}<div class="row" style="margin-bottom:10px">
   ${[["","A receber"],["late","Atrasadas"],["paid","Pagas"]].map(([k,t])=>`<button class="${f===k?"":"g"}" onclick="filter='${k}';render()">${t}</button>`).join("")}</div>
-  ${list.length?list.map(instRow).join(""):`<div class="empty">Nada por aqui</div>`}`;
+  ${list.length?list.map(x=>instRow(x)+(window.kmNexus?.managed(x.s)&&!x.i.paid?`<button type="button" class="g" data-nexus-action="charge" data-nexus-id="${esc(x.s.id)}" data-nexus-index="${x.n}">Editar cobrança</button>`: '')).join(""):`<div class="empty">Nada por aqui</div>`}`;
 }
 let tmpProof="";
 const getProof=(id,n)=>((S.proofs.find(x=>x.id===id+"_"+n))||{}).img||"";
@@ -322,12 +323,12 @@ function sales(){
     const p=paid(s),pct=s.price?Math.min(100,p/s.price*100):0;
     const done=Array.isArray(s.inst)&&s.inst.length>0&&s.inst.every(i=>i.paid);
     return`<details class="card item ${done?"sale-closed":""}"><summary style="list-style:none;cursor:pointer"><div class="row">${thumb(s)}<div class="grow"><div class="row" style="justify-content:space-between;align-items:flex-start;gap:5px"><b>${esc(s.client||"Sem nome")}</b><span class="sale-status ${done?"done":""}">${done?"✓ Pago":p>0?"◷ Parcial":"◷ Pendente"}</span></div>
-    <div class="sub">${esc(s.name)} · ${fmt(s.date)}</div>
+    <div class="sub">${esc(s.name)} · ${fmt(s.date)} · ${s.source==="catalog"?"Catálogo":"Manual"}</div>
     <div class="sub">Venda <b>${money(s.price)}</b> · Lucro ${money(s.price-s.cost)}</div></div></div>
     <div class="bar"><i style="width:${pct}%"></i></div><div class="sub">Recebido ${money(p)} de ${money(s.price)}</div></summary>
     ${s.inst.map((i,n)=>`<div class="inst"><span>${n+1}ª · ${fmt(i.d)} · ${money(i.v)} <span class="chip ${status(i)}">${i.paid?"pago":status(i)==="bad"?"atrasada":"aberta"}</span></span><span class="row" style="gap:6px">${i.paid?`<button class="g" onclick="proofForm('${s.id}',${n})">${getProof(s.id,n)?"🧾":"＋🧾"}</button>`:""}<button class="${i.paid?"g":""}" onclick="pay('${s.id}',${n})">${i.paid?"Desfazer":"Pago"}</button></span></div>`).join("")}
     ${s.note?`<div class="sub" style="margin-top:6px">📝 ${esc(s.note)}</div>`:""}
-    <div class="row" style="justify-content:flex-end;flex-wrap:wrap;margin-top:8px"><button onclick="printReceipt('${s.id}')">🧾 Recibo</button><button class="g" onclick="saleForm('${s.id}')">✏️ Editar venda</button><button class="r" onclick="delSale('${s.id}')">Excluir venda</button></div></details>`;
+    ${window.kmNexus?.managed(s)?`<div class="row">${window.kmNexus.button('edit',s.id,'Editar venda')}${window.kmNexus.button('charge',s.id,'Cadastrar cobrança')}<button class="g" onclick="printReceipt('${s.id}')">Recibo</button></div>`:`<div class="row" style="justify-content:flex-end;flex-wrap:wrap;margin-top:8px"><button onclick="printReceipt('${s.id}')">🧾 Recibo</button><button class="g" onclick="saleForm('${s.id}')">✏️ Editar venda</button><button class="r" onclick="delSale('${s.id}')">Excluir venda</button></div>`}</details>`;
   };
   return`<h1>Vendas</h1><input id="salesSearch" placeholder="🔍 Buscar cliente, produto, telefone, valor ou data" value="${esc(filter)}" oninput="filter=this.value;render();const el=$('salesSearch');el.focus();el.setSelectionRange(el.value.length,el.value.length)">
   <div class="toolbar-filters"><select aria-label="Filtrar situação da venda" onchange="saleFilter=this.value;render()"><option value="all" ${saleFilter==="all"?"selected":""}>Todas as situações</option><option value="open" ${saleFilter==="open"?"selected":""}>Pendentes + parciais</option><option value="partial" ${saleFilter==="partial"?"selected":""}>Pagamento parcial</option><option value="done" ${saleFilter==="done"?"selected":""}>Totalmente pagas</option></select>
@@ -973,8 +974,8 @@ function cloudSave(){
   if(!db||!cloudOn)return;
   ["products","sales","catalog","cphotos","expenses","closings","config","proofs"].forEach(c=>{
     const cur={};(S[c]||[]).forEach(x=>cur[x.id]=JSON.stringify(x));
-    Object.keys(cur).forEach(id=>{if(last[c][id]!==cur[id]){last[c][id]=cur[id];db.collection(c).doc(id).set(JSON.parse(cur[id])).catch(e=>console.error(e))}});
-    Object.keys(last[c]).forEach(id=>{if(!(id in cur)){delete last[c][id];db.collection(c).doc(id).delete().catch(e=>console.error(e))}});
+    Object.keys(cur).forEach(id=>{if(c==='sales'&&window.kmNexus?.managed(JSON.parse(cur[id])))return;if(last[c][id]!==cur[id]){last[c][id]=cur[id];db.collection(c).doc(id).set(JSON.parse(cur[id])).catch(e=>console.error(e))}});
+    Object.keys(last[c]).forEach(id=>{if(!(id in cur)){if(c==='sales'&&window.kmNexus?.managed(JSON.parse(last[c][id])))return;delete last[c][id];db.collection(c).doc(id).delete().catch(e=>console.error(e))}});
   });
 }
 function listen(){
@@ -1067,7 +1068,8 @@ render();initCloud();
 <script src="central.js"></script>
 <script src="business3.js"></script>
 <script src="inventory3.js"></script>
-<script src="visual.js?v=catalogo-2"></script>
+<script src="nexus-business.js"></script>
+<script src="visual.js?v=nexus-1"></script>
 <script src="vendor/qrcode-2.0.4.js"></script>
 <script src="receipt-pdf.js?v=pdf-file-1"></script>
 <script src="receipt.js?v=pdf-file-1"></script>
