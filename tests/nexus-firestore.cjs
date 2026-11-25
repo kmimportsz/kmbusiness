@@ -122,6 +122,15 @@ async function run(){
   assert.match(concurrent.find(x=>x.status==='rejected').reason.message,/atualizada/);
   const revised=(await getDoc(ref('sales',sale.id))).data();
   assert.deepEqual(revised.inst,[payment]);
+  await assertFails(setDoc(ref('sales',sale.id),{...revised,inst:[],revision:4,
+   events:[...revised.events,{id:'delete-receipt',label:'Venda revisada',actor:'operator'}]}));
+  await assertFails(setDoc(ref('sales',sale.id),{...revised,inst:[{...payment,v:1}],revision:4,
+   events:[...revised.events,{id:'edit-receipt',label:'Cobrança revisada',actor:'operator',chargeIndex:0}]}));
+  const unpaid={id:'second-charge',v:20,d:'2026-11-30',paid:false,pd:null};
+  await writeSale(sale.id,3,live=>({...live,inst:[...live.inst,unpaid]}),'Cobrança registrada');
+  await writeSale(sale.id,4,live=>({...live,inst:[live.inst[0],{...live.inst[1],v:25}]}),'Cobrança revisada',1);
+  const charges=(await getDoc(ref('sales',sale.id))).data().inst;
+  assert.deepEqual(charges,[payment,{...unpaid,v:25}]);
   assert.equal(revised.price,90);
   assert.equal(revised.cost,38);
   assert.equal((await getDoc(ref('products','camiseta'))).data().stock,6);

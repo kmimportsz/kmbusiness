@@ -237,7 +237,7 @@ function editForm(sale){
   if(e.target.dataset.nexusAction==='remove-line')e.target.closest('[data-nexus-line]').remove();
  });
 }
-async function writeSale(id,version,change,label){
+async function writeSale(id,version,change,label,chargeIndex=null){
  const ref=saleRef(id),at=new Date().toISOString(),audit=event(label,at);
  try{await db.runTransaction(async tx=>{
   const snap=await tx.get(ref);
@@ -245,7 +245,10 @@ async function writeSale(id,version,change,label){
   if(!snap.exists||!managed(live)||live.revision!==version)fail('A venda foi atualizada. Reabra e confira.');
   const updated=await change(live,tx);
   const {stockAdjustment,...record}=updated;
-  const entry=stockAdjustment?.length?{...audit,stock:stockAdjustment}:audit;
+  const entry={...audit};
+  if(stockAdjustment?.length)entry.stock=stockAdjustment;
+  if(label==='Cobrança registrada')entry.chargeIndex=live.inst.length;
+  if(label==='Cobrança revisada')entry.chargeIndex=chargeIndex;
   tx.set(ref,{...record,revision:version+1,updatedAt:at,events:[...(live.events||[]),entry]});
  })}catch(error){
   if(error.code!=='permission-denied')throw error;
@@ -271,7 +274,7 @@ function chargeForm(sale,index){
    if(existing)inst[index]=charge;else inst.push(charge);
    if(paymentTotal(inst)>cents(live.price))fail('O valor supera o saldo disponível para cobranças.');
    return {...live,inst};
-  },existing?'Cobrança revisada':'Cobrança registrada'));
+  },existing?'Cobrança revisada':'Cobrança registrada',existing?index:null));
 }
 document.addEventListener('click',async e=>{
  const el=e.target.closest('[data-nexus-action]');if(!el)return;

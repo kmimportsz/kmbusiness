@@ -41,6 +41,32 @@ match /nexusOrders/{orderId} {
 function nexusManagedSaleId(saleId) {
   return saleId.matches('^(pedido|manual)-[A-Za-z0-9_-]+$');
 }
+function nexusChargeValid(charge) {
+  return charge is map && charge.id is string
+    && charge.v is number && charge.v > 0
+    && charge.d is string && charge.d.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+    && charge.paid is bool
+    && ((!charge.paid && charge.pd == null)
+      || (charge.paid && charge.pd is string && charge.pd.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')));
+}
+function nexusSaleRevision(next, prior, audit) {
+  let onlyCharges = next.diff(prior).affectedKeys().hasOnly(['inst','revision','updatedAt','events']);
+  return audit.actor == request.auth.uid
+    && (
+      (audit.label == 'Venda revisada' && next.inst == prior.inst)
+      || (onlyCharges && audit.chargeIndex is int && audit.chargeIndex >= 0
+        && audit.chargeIndex < next.inst.size() && nexusChargeValid(next.inst[audit.chargeIndex])
+        && (
+          (audit.label == 'Cobrança registrada'
+            && audit.chargeIndex == prior.inst.size() && next.inst.size() == prior.inst.size() + 1
+            && next.inst.removeAll([next.inst[audit.chargeIndex]]) == prior.inst)
+          || (audit.label == 'Cobrança revisada' && next.inst.size() == prior.inst.size()
+            && prior.inst[audit.chargeIndex].paid == false
+            && next.inst[audit.chargeIndex].id == prior.inst[audit.chargeIndex].id
+            && next.inst.removeAll([next.inst[audit.chargeIndex]]) == prior.inst.removeAll([prior.inst[audit.chargeIndex]]))
+        ))
+    );
+}
 function nexusManagedSaleWrite(saleId) {
   let next = request.resource.data;
   return nexusOperator()
@@ -60,7 +86,8 @@ function nexusManagedSaleWrite(saleId) {
       (exists(/databases/$(database)/documents/sales/$(saleId))
         && next.revision == resource.data.revision + 1
         && next.events.size() == resource.data.events.size() + 1
-        && next.events.hasAll(resource.data.events)
+        && next.events.removeAll([next.events[next.events.size() - 1]]) == resource.data.events
+        && nexusSaleRevision(next, resource.data, next.events[next.events.size() - 1])
         && !next.diff(resource.data).affectedKeys().hasAny(['id', 'source', 'orderId', 'orderCode', 'createdAt'])
       )
     );
