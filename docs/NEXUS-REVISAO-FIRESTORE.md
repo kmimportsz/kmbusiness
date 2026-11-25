@@ -22,3 +22,16 @@ Executei `tests/nexus-firestore.cjs` com esta candidata completa no Firestore Em
 - O acesso a estoque legado continua amplo para ambos os administradores, por compatibilidade. As regras de pedidos exigem o vínculo atômico com a venda, porém não verificam no próprio ruleset todo o cálculo ou a baixa de estoque. Essa validação ocorre no fluxo transacional do cliente. Concorra na homologação com edições legadas de estoque e confira reconciliação. Se a exigência for proteção contra cliente administrativo adulterado, a operação precisa de validação server-side e de um desenho específico para as escritas legadas.
 - A conta de serviço do Worker autentica com IAM e não é restringida por Security Rules. Os testes do Worker usam credencial fictícia e não comprovam o escopo IAM real. Valide em homologação a credencial de menor privilégio e o Worker real.
 - Nenhuma regra foi aplicada à produção. A implantação exige backup verificável e homologação com o projeto isolado e as regras completas.
+
+## Cadastro dos dois operadores e homologação cruzada
+
+No **projeto isolado**, um administrador autorizado deve abrir **Firebase Console → Firestore Database → Dados**, localizar ou criar a coleção `nexusOperators` e gravar os dois documentos abaixo. O ID de cada documento é o UID correspondente em **Authentication → Users**. Use o campo **booleano** `active`, com valor `true`. Se o documento já existir, altere apenas esse campo, preservando os demais. Confira os dois documentos de volta pelo console. Os UIDs não devem entrar no Git, em logs de teste ou em comentários públicos.
+
+| Caminho no ambiente isolado | Dado |
+| --- | --- |
+| `nexusOperators/<UID_CONFIRMAÇÃO_1>` | `{ active: true }` |
+| `nexusOperators/<UID_CONFIRMAÇÃO_2>` | `{ active: true }` |
+
+Os testes do PR usam dois UIDs fictícios e duas sessões autenticadas independentes. A entrada em lote da segunda sessão roda pelo módulo `inventory3.js` em concorrência com a confirmação de pedido da primeira. A entrada de três unidades e a baixa de duas partem de seis unidades e terminam em sete. A segunda sessão recebe estoque, venda sem cobrança e pedido confirmado pelos listeners, sem recarregar. Repetir a entrada não duplica estoque; a contagem baseada em seis unidades é recusada e não gera lançamento. A venda legada da amostra permanece idêntica.
+
+Isso valida os caminhos **transacionais**. A gravação genérica legada de produtos em `cloudSave()` ainda pode enviar o documento inteiro a partir de um estado desatualizado; a candidata preserva essa permissão por compatibilidade. Convergência entre os caminhos transacionais não demonstra que uma edição genérica concorrente seja segura. Também falta a conferência real de colisões de IDs, inventário e integridade dos dados de produção após restauração integral. Esses pontos devem ser tratados antes de publicar.

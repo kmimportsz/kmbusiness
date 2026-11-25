@@ -94,19 +94,19 @@ async function run(){
   await assertFails(setDoc(doc(anon,'products','camiseta'),{stock:1}));
   await assertFails(setDoc(doc(unlisted,'sales','historical'),{price:1}));
   const original=await getDoc(ref('sales','historical'));
-  const db={
+  const adapter=firestore=>({
    collection(name){return {
-    doc:id=>ref(name,id),
-    onSnapshot:(opts,next,error)=>onSnapshot(collection(store,name),opts,snapshot=>next({
+    doc:id=>doc(firestore,name,id),
+    onSnapshot:(opts,next,error)=>onSnapshot(collection(firestore,name),opts,snapshot=>next({
      metadata:snapshot.metadata,docs:snapshot.docs.map(d=>({id:d.id,data:()=>d.data()}))
     }),error)
    }},
-   runTransaction:fn=>runTransaction(store,tx=>fn({
+   runTransaction:fn=>runTransaction(firestore,tx=>fn({
     async get(ref){const s=await tx.get(ref);return {exists:s.exists(),data:()=>s.data()}},set:(ref,data)=>tx.set(ref,JSON.parse(JSON.stringify(data))),update:(ref,data)=>tx.update(ref,JSON.parse(JSON.stringify(data)))
    }))
-  };
+  });
   const context=page.getInternalVMContext();
-  Object.assign(context,{db,au:{currentUser:{uid:'operator'}},cloudOn:true,tab:'home',unsubs:[],S:{sales:[],products:[]},
+  Object.assign(context,{db:adapter(store),au:{currentUser:{uid:'operator'}},cloudOn:true,tab:'home',unsubs:[],S:{sales:[],products:[]},
    today:()=> '2026-11-25',listen(){},pay(){},delSale(){},saleForm(){},saveSale(){},render(){},$:id=>page.window.document.getElementById(id),
    esc:String,money:String});
   vm.runInContext(readFileSync('nexus-business.js','utf8').replace('if(authenticated())listen();',
@@ -171,8 +171,40 @@ async function run(){
   await assertFails(setDoc(doc(legacyOnly,'nexusOrders','third'),{...cancelThird,decidedBy:'legacy-only'}));
   await setDoc(doc(secondAdmin,'nexusOrders','third'),cancelThird);
   await count(0);
+  await environment.withSecurityRulesDisabled(async context=>{
+   await setDoc(doc(context.firestore(),'nexusOrders','stock-race'),order);
+  });
+  const stockPage=new JSDOM('',{runScripts:'outside-only'});
+  try{
+   const stockContext=stockPage.getInternalVMContext();
+   Object.assign(stockContext,{firebase:{},db:adapter(secondAdmin),au:{currentUser:{uid:'second-admin',email:emails[1]}},
+    cloudOn:true,ready:{products:true,config:true},last:{products:{},config:{}},S:{products:[{id:'camiseta'}],config:[]},
+    KEY:'isolated-test',tab:'home',render(){}});
+   vm.runInContext(readFileSync('inventory3.js','utf8')
+    .replace('const previousRender=render;', 'window.testCommitStock=commitStock;const previousRender=render;'),stockContext);
+   const productRef=doc(secondAdmin,'products','camiseta');
+   const seen=[];
+   const stops=[
+    onSnapshot(productRef,s=>{if(s.exists())seen.push(['stock',s.data().stock])}),
+    onSnapshot(doc(secondAdmin,'sales','pedido-stock-race'),s=>{if(s.exists())seen.push(['sale',s.data().inst.length])}),
+    onSnapshot(doc(secondAdmin,'nexusOrders','stock-race'),s=>{if(s.exists())seen.push(['order',s.data().status])})
+   ];
+   try{
+    const inbound={id:'test-inbound',kind:'inbound',reason:'Teste isolado',items:[{pid:'camiseta',qty:3,cost:38}]};
+    await Promise.all([decide('stock-race',true,['camiseta'],1500,1500),stockContext.testCommitStock(inbound)]);
+    await stockContext.testCommitStock(inbound);
+    assert.equal((await getDoc(productRef)).data().stock,7);
+    await assert.rejects(stockContext.testCommitStock({id:'stale-count',kind:'count',reason:'Teste isolado',items:[{pid:'camiseta',qty:10,expected:6}]}),/estoque mudou/i);
+    assert.equal((await getDoc(doc(secondAdmin,'config','stale-count'))).exists(),false);
+    for(let i=0;i<80&&!(seen.some(([k,v])=>k==='stock'&&v===7)&&seen.some(([k,v])=>k==='sale'&&v===0)&&seen.some(([k,v])=>k==='order'&&v==='confirmed'));i++)await new Promise(r=>setTimeout(r,100));
+    assert.ok(seen.some(([k,v])=>k==='stock'&&v===7));
+    assert.ok(seen.some(([k,v])=>k==='sale'&&v===0));
+    assert.ok(seen.some(([k,v])=>k==='order'&&v==='confirmed'));
+    assert.deepEqual((await getDoc(ref('sales','historical'))).data(),original.data());
+   }finally{stops.forEach(fn=>fn())}
+  }finally{stockPage.window.close()}
   context.unsubs.forEach(fn=>fn());
-  console.log('PASS emulador: regras, contador, confirmação e cancelamento concorrentes, retry, estoque, edição concorrente, recebimento e histórico.');
+  console.log('PASS emulador: regras, contador, confirmação e cancelamento concorrentes, retry, estoque, edição concorrente, recebimento, histórico, entrada concorrente e sincronização de dois administradores.');
  }finally{page.window.close();await environment.cleanup()}
 }
 run().catch(error=>{console.error(error);process.exitCode=1});
