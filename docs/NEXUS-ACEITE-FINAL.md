@@ -116,10 +116,21 @@ A evidência registra os resultados informados pelo proprietário. O arquivo e a
 
 ## Preparação do backup, liberação e reversão
 
-1. Registrar o SHA atual do GitHub Pages, a versão ativa do Worker e a revisão do ruleset do Firestore. Exportar as regras vigentes, os registros protegidos de Firestore e os dados e imagens do catálogo, com armazenamento controlado pelo proprietário. Registrar contagens, carimbo de tempo e SHA-256 dos arquivos fora do repositório. A conferência deve incluir restauração de amostra em ambiente separado e comparação das contagens e hashes.
-2. Homologar com credenciais fornecidas pelo mecanismo oficial da infraestrutura, separadas de produção, e validar conciliação de dados, permissões, integração e pagamentos. Vincular o parecer da IA Pessoal ao SHA efetivamente revisado.
-3. Com a liberação técnica concluída, ativar regras e Worker antes do cliente, testar o contrato e publicar somente a candidata aprovada. Conferir os dois endereços originais, o SHA servido, a saúde do endpoint e a integridade dos registros.
-4. Em regressão, restaurar a versão anterior do cliente e do Worker. Preservar os pedidos, vendas e recebimentos novos. Qualquer retorno do ruleset deve preservar a autorização necessária aos registros já criados e ser conferido antes de aplicar. Manter disponível o tratamento dos pedidos recebidos.
+### Sequência de publicação e reversão
+
+1. Antes da publicação, registrar o SHA servido pelo GitHub Pages, a versão ativa do Worker, a revisão das regras e o inventário privado do R2. Vincular as evidências de aceite e o parecer independente ao SHA candidato. O backup Firestore aprovado permanece válido como evidência. Uma eventual atualização do backup só será necessária se o intervalo ou alterações nos dados tornarem a cópia insuficiente para a janela de mudança.
+2. Em homologação, aplicar regras e configuração do Worker isolados, validar o contrato, publicar a candidata no endereço privado e testar com dois operadores e um iPhone. Ensaiar ali a desativação do recebimento e a restituição do catálogo independente. Conferir os pedidos, vendas, recebimentos e estoque antes e depois.
+3. Após o aceite final, aplicar e verificar regras, permissões e Worker antes do cliente. Conferir os endereços oficiais, o SHA servido, o catálogo, a experiência em Safari e os fluxos de operação. Registrar os horários e as versões.
+4. Se houver regressão após receber pedidos, bloquear novas entradas no Worker, inclusive as de clientes com HTML em cache. Validar o fluxo de catálogo anterior com a mesma origem e o atendimento via WhatsApp. Reverter somente o cliente público e manter o Business e as regras que permitem aos operadores tratar pedidos já gravados. Reconciliar os registros pendentes com os administradores. Manter pedidos, vendas, recebimentos, estoque e objetos do bucket. A restauração integral do backup não faz parte da reversão rotineira.
+5. Somente após concluir a conciliação, avaliar se algum componente administrativo ou ruleset precisa voltar à revisão anterior. Confirmar as permissões sobre todos os dados introduzidos desde a liberação antes de aplicar qualquer mudança.
+
+### Ensaio local de reversão
+
+A candidata `d82a2516270581b08c006cd29d8ae3b1f53010d4` e os arquivos da `main` `43742a39e3aae11f5b5493e22e86eeef1f5d36cc` serviram de referência. O Worker anterior foi compilado a partir da `main`. A versão efetivamente ativa no provedor ainda precisa ser identificada antes de uma reversão hospedada.
+
+- Em Chromium local a 320, 390 e 1280 px, o catálogo anterior voltou ao fluxo de WhatsApp. A busca, favoritos, sacola e revisão passaram. O teste simulou backend e WhatsApp.
+- Em workerd com Miniflare 4.20260730.0 e R2 isolado, a candidata recusou exportação anônima com HTTP 401 e registro sem Firestore configurado com 503. A versão anterior recusou a rota de pedidos com 404, manteve a leitura do catálogo e preservou os SHA-256 dos quatro objetos de teste.
+- O ensaio cobre a reversão do catálogo e Worker locais. A validação hospedada ainda deve comprovar a operação das versões reais e a preservação dos pedidos e vendas existentes com as regras mantidas.
 
 ## Evidências dos ajustes finais
 
@@ -147,3 +158,22 @@ Passaram a suíte da raiz, a suíte do catálogo, o build e a verificação de s
 A suíte do Business, a suíte do catálogo, o build e a checagem de sintaxe do Worker passaram. Um Firestore Emulator novo e restrito a loopback validou as regras candidatas, a sincronização com dois administradores, a concorrência de estoque, pedidos, recebimentos e histórico. A execução do Worker nesse teste usa R2 e OAuth de teste.
 
 A consulta de leitura ao ambiente conectado não encontrou um Worker de homologação do K&M. O R2 da conta Cloudflare conectada retornou HTTP 403, código 10042. A prévia privada existente no Sites está acessível para inspeção, sem as variáveis `ORDER_FIRESTORE_PROJECT` e `ORDER_FIRESTORE_WRITER`. A homologação hospedada aguarda um projeto Firestore isolado e uma identidade de teste vinculada a essa prévia ou a outro Worker existente, com bucket isolado e sem dados de produção. O parecer independente do NEXUS e o aceite em iPhone físico continuam abertos. [Acessos necessários](NEXUS-HOMOLOGACAO-ACESSO.md)
+
+## Apuração dos critérios obrigatórios
+
+Cada um dos dez critérios tem peso igual. Só entra no percentual um critério integralmente comprovado.
+
+| Critério | Estado |
+| --- | --- |
+| Todas as funcionalidades aprovadas | Parcial. Validação local e emulada registrada; falta a jornada hospedada e física. |
+| Todos os testes obrigatórios aprovados | Parcial. Faltam os testes reais de aceite e do ambiente hospedado. |
+| Homologação hospedada concluída | Pendente. Firestore, Worker e bucket isolados ainda precisam ser vinculados. |
+| Auditoria independente concluída | Pendente. Parecer solicitado pelo NEXUS. |
+| Nenhuma falha crítica ou relevante aberta | Pendente. Falta validar identidade de borda, permissões reais e proteção contra abuso no endpoint público. |
+| Nenhuma regressão conhecida | Validação local registrada. Critério definitivo depende da regressão hospedada. |
+| Nenhum bloqueio operacional pendente | Pendente. Acessos, parecer e teste físico. |
+| Backup e recuperação validados | Aprovado para Firestore de produção, com restauração isolada e SHA-256 da cópia transferida confirmados pelo proprietário. O inventário privado do R2 pertence ao ensaio de reversão hospedado. |
+| Compatibilidade móvel comprovada | Parcial. WebKit local passou na repetição; falta Safari em iPhone físico. |
+| Procedimento de publicação e reversão validado | Parcial. Ensaio local passou; falta executar o procedimento com as versões e permissões hospedadas. |
+
+Total integralmente aprovado: 1 de 10 (10%). A publicação continua condicionada à conclusão dos demais critérios e ao aceite final.
