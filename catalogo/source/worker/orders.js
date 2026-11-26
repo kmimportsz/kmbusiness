@@ -26,6 +26,15 @@ async function orderGoogleToken(env){
  const raw=env.ORDER_FIRESTORE_WRITER;
  if(!raw)throw new OrderError('Registro de pedidos temporariamente indisponível.',503);
  const credential=JSON.parse(raw);
+ if(credential?.type==='staging_access_token'){
+  const remaining=credential.expiresAt-Date.now();
+  if(env.ORDER_FIRESTORE_PROJECT!=='km-business-homologacao'
+    ||typeof credential.accessToken!=='string'||!/^[A-Za-z0-9._~+\/=\-]+$/.test(credential.accessToken)
+    ||!Number.isSafeInteger(credential.expiresAt)||remaining<=0||remaining>3600000){
+   throw new OrderError('Registro de pedidos temporariamente indisponível.',503);
+  }
+  return credential.accessToken;
+ }
  const account=env.ORDER_FIRESTORE_PROJECT+':'+credential.client_email;
  if(orderTokenCache?.account===account&&orderTokenCache.expires>Date.now()+60000)return orderTokenCache.token;
  const now=Math.floor(Date.now()/1000);

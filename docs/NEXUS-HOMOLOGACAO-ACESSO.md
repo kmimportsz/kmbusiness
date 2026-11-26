@@ -121,3 +121,20 @@ O proprietário executou o teste com a credencial real no Cloud Shell e
 confirmou que OAuth, acesso ao Firestore hospedado, concorrência e repetição
 passaram. A validação da credencial no Cloud Shell está concluída.
 [Evidência do teste](nexus-evidencias/firestore-homologacao-cloud-shell.json)
+
+### Credencial temporária para uma janela de homologação
+
+O Worker aceita em `ORDER_FIRESTORE_WRITER` um segredo JSON no formato
+`{"type":"staging_access_token","accessToken":"<OAuth>","expiresAt":<epoch em ms>}`.
+A opção é exclusiva de `km-business-homologacao`. O Worker rejeita ausência,
+expiração, prazo restante acima de uma hora e uso contra outro projeto. O prazo
+informado deve ser igual ou anterior à validade real emitida pelo Google.
+O modo não permite renovar o token a partir do próprio Worker.
+
+Para evitar armazenar a chave privada no runtime, gere uma credencial de curta
+duração no ambiente autorizado. A emissão sem chave depende de uma identidade
+apta a gerar tokens para a conta de serviço. A prévia atual não expôs identidade
+de workload, e nenhuma delegação IAM adicional foi configurada. O conector Sites
+aceita o valor como segredo, mas não retornou um link para inserção direta pelo
+proprietário. A homologação hospedada aguarda um canal seguro de entrada no
+runtime selecionado. Tokens e chaves não devem passar pelo chat, Git ou logs.

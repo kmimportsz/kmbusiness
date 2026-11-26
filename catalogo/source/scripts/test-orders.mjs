@@ -32,3 +32,30 @@ const {default:worker}=await import('../worker/index.js');
 const post=(origin,text)=>new Request(url,{method:'POST',headers:{origin,'content-type':'application/json'},body:text});
 assert.equal((await worker.fetch(post('https://other.example.invalid','{}'),{})).status,403);
 assert.equal((await worker.fetch(post(allowed,'x'.repeat(16001)),{})).status,413);
+
+const stagingProject='km-business-homologacao';
+const nativeFetch=globalThis.fetch;
+const outbound=[];
+globalThis.fetch=async(url,options)=>{
+ outbound.push({url,authorization:options.headers.authorization});
+ return new Response(null,{status:404});
+};
+try{
+ const {orderStore}=await import('../worker/orders.js');
+ const temporary={type:'staging_access_token',accessToken:'fixture.staging',expiresAt:Date.now()+300000};
+ const storeWith=(project,credential)=>orderStore({
+  ORDER_FIRESTORE_PROJECT:project,
+  ORDER_FIRESTORE_WRITER:JSON.stringify(credential)
+ });
+ assert.equal(await storeWith(stagingProject,temporary).get(body.key),null);
+ assert.deepEqual(outbound,[{
+  url:'https://firestore.googleapis.com/v1/projects/'+stagingProject+'/databases/(default)/documents/nexusOrders/'+body.key,
+  authorization:'Bearer fixture.staging'
+ }]);
+ await assert.rejects(storeWith('agenda-vendas-9922a',temporary).get(body.key),{status:503});
+ await assert.rejects(storeWith(stagingProject,{...temporary,expiresAt:Date.now()-1}).get(body.key),{status:503});
+ await assert.rejects(storeWith(stagingProject,{...temporary,expiresAt:Date.now()+7200000}).get(body.key),{status:503});
+ await assert.rejects(storeWith(stagingProject,{...temporary,accessToken:'invalid\nheader'}).get(body.key),{status:503});
+ assert.equal(outbound.length,1);
+}finally{globalThis.fetch=nativeFetch}
+console.log('PASS token temporário: uso exclusivo em homologação, expiração e rejeição sem tráfego externo.');
