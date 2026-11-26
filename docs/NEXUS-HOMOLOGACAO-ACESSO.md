@@ -96,3 +96,23 @@ a chave temporária criada para esta rodada e remova o segredo. A configuração
 pública do app Firebase Web e a confirmação do armazenamento isolado também
 são necessárias para preparar a versão de teste. Até então, não faça pedidos
 de teste na prévia ativa.
+
+### Verificação da credencial sem cadastrar o segredo na prévia
+
+O conector Sites disponibiliza configuração de segredos, mas não retornou
+um painel para o proprietário inserir a chave nem um fluxo de entrega segura
+da chave que está no iPhone. O arquivo deve permanecer privado.
+
+Em um terminal privado com Node.js 22+, execute
+`node catalogo/source/scripts/check-staging-firestore.mjs /caminho/privado/chave.json`.
+O arquivo deve ter permissão `0600`. O script executa o código do Worker no
+Node.js, verifica o projeto e a identidade da chave e limita as chamadas ao
+OAuth do Google e à coleção `nexusOrders` de `km-business-homologacao`.
+Ele cria um pedido sintético no Firestore hospedado de homologação, compara
+duas chamadas concorrentes e a repetição, e verifica a rejeição de um conteúdo
+diferente com a mesma chave. O resultado mostra somente identificadores e
+status. O procedimento não cadastra o segredo do Site nem valida o runtime
+hospedado, o bucket ou a sessão do navegador.
+
+O script foi verificado com chave descartável, resposta OAuth simulada e
+Firestore Emulator. As credenciais reais continuam sob controle do proprietário.
