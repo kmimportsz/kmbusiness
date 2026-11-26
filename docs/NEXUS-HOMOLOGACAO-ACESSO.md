@@ -116,3 +116,8 @@ hospedado, o bucket ou a sessão do navegador.
 
 O script foi verificado com chave descartável, resposta OAuth simulada e
 Firestore Emulator. As credenciais reais continuam sob controle do proprietário.
+
+O proprietário executou o teste com a credencial real no Cloud Shell e
+confirmou que OAuth, acesso ao Firestore hospedado, concorrência e repetição
+passaram. A validação da credencial no Cloud Shell está concluída.
+[Evidência do teste](nexus-evidencias/firestore-homologacao-cloud-shell.json)

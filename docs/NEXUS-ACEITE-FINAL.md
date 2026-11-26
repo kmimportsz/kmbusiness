@@ -177,3 +177,17 @@ Cada um dos dez critérios tem peso igual. Só entra no percentual um critério 
 | Procedimento de publicação e reversão validado | Parcial. Ensaio local passou; falta executar o procedimento com as versões e permissões hospedadas. |
 
 Total integralmente aprovado: 1 de 10 (10%). A publicação continua condicionada à conclusão dos demais critérios e ao aceite final.
+
+### OAuth e Firestore hospedado pelo Cloud Shell
+
+O proprietário confirmou a execução do teste com a conta de serviço de
+homologação contra o Firestore hospedado em `km-business-homologacao`.
+OAuth, concorrência com a mesma chave, repetição, rejeição de conteúdo
+diferente com a mesma chave e rejeição de origem inválida passaram. A
+pendência desse teste está encerrada. [Evidência reportada pelo proprietário](nexus-evidencias/firestore-homologacao-cloud-shell.json)
+
+O código do Worker rodou no Node.js, com catálogo sintético. A validação
+da prévia e do runtime hospedado permanece aberta, incluindo segredo no
+Sites, bucket isolado, autenticação dos operadores e jornada no Safari
+físico. A inspeção da prévia confirmou o projeto de homologação configurado
+e a ausência do segredo do Worker.
