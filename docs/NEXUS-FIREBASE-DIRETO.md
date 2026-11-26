@@ -105,3 +105,19 @@ no emulador com as regras candidatas. Para identificar a divergência
 exata, confira a revisão de regras ativa no console de homologação com
 uma sessão Google autorizada. A publicação oficial aguarda a validação
 hospedada.
+
+### Comparação das regras informadas pelo proprietário
+
+O texto copiado do editor de homologação foi comparado com as regras
+do PR, desconsiderando comentários, formatação e os dois identificadores
+de e-mail. Os trechos executáveis coincidem. A suíte do emulador rodou
+com o arquivo enviado, substituindo apenas a lista de e-mails pelas
+identidades sintéticas da suíte. Passaram criação anônima, isolamento,
+cadência, concorrência, aprovação, recusa, venda e baixa de estoque.
+
+O teste REST hospedado repetiu login anônimo HTTP 200, consulta de ID
+próprio inexistente HTTP 404 e negação de leitura de estoque e pedidos
+de terceiros HTTP 403. O commit de um pedido válido continuou respondendo
+HTTP 403. A divergência entre emulador e serviço hospedado não foi
+atribuída a uma condição específica. O texto copiado não confirma por
+si só o vínculo entre a revisão publicada e o banco da requisição.
