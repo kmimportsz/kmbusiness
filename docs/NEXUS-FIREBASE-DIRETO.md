@@ -87,3 +87,21 @@ No banco de homologação, o estoque de teste correspondente pode ser
 `catalogId: "homologacao-camiseta"`, `price: 80`, `cost: 30`, `stock: 5`
 e `stockRevision: 1`. Ao aprovar uma unidade, a segunda sessão deve observar
 estoque 4 e uma única venda associada ao pedido.
+
+## Teste automatizado do checkout hospedado
+
+Execute `node tests/nexus-hosted-orders.mjs` com Node.js e curl. O teste
+só usa `km-business-homologacao`, cria um comprador anônimo descartável
+e confere isolamento, WhatsApp obrigatório, gravação atômica, duplicação
+e intervalo entre pedidos. Ele imprime os status de cada etapa e remove
+a conta temporária no fim. Se a gravação passar, o identificador do pedido
+sintético fica no relatório para testar aprovação ou recusa no Business.
+O pedido gravado é mantido no ambiente de testes para essa próxima etapa.
+
+A execução hospedada mais recente comprovou o login e o isolamento da
+leitura, mas a gravação do pedido válido retornou `403`. A chamada REST
+e o SDK apresentaram o mesmo resultado. O lote equivalente passou
+no emulador com as regras candidatas. Para identificar a divergência
+exata, confira a revisão de regras ativa no console de homologação com
+uma sessão Google autorizada. A publicação oficial aguarda a validação
+hospedada.
