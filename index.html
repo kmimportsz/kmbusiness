@@ -562,7 +562,25 @@ function more(){
 function calc(){const c=+$("cc").value||0,m=+$("cm").value||0,p=c*(1+m/100);$("cr").innerHTML=c?`Venda por <b>${money(p)}</b> → lucro de <b class="ok">${money(p-c)}</b>`:""}
 const theme=t=>document.documentElement.setAttribute("data-theme",t);
 function copyBk(){const j=JSON.stringify(S);try{navigator.clipboard.writeText(j).then(()=>alert("Backup copiado!"),()=>{$("bk").value=j;$("bk").select()})}catch(e){$("bk").value=j;$("bk").select()}}
-function restore(){try{const d=JSON.parse($("bk").value);if(!d.sales||!d.products)throw 0;if(confirm("Substituir os dados atuais?")){if(!d.catalog)d.catalog=S.catalog||[];for(const k of["cphotos","expenses","closings","config","proofs"])if(!d[k])d[k]=S[k]||[];S=d;save();render()}}catch(e){alert("Backup inválido")}}
+async function restore(){
+ try{
+  const d=JSON.parse($("bk").value);
+  if(!Array.isArray(d.sales)||!Array.isArray(d.products))throw Error("Backup inválido.");
+  if(!confirm("Substituir os dados atuais?"))return;
+  if(db&&cloudOn){
+   if(!ready.products)throw Error("Aguarde a sincronização dos produtos.");
+   const next=new Map(d.products.map(p=>[p.id,p]));
+   if(next.size!==d.products.length||d.products.some(p=>!p.id))throw Error("O backup contém produtos sem ID ou repetidos.");
+   const ids=[...new Set([...Object.keys(last.products),...next.keys()])];
+   await commitProductChanges(ids.map(id=>({id,before:JSON.parse(last.products[id]||"null"),after:next.get(id)||null}))
+     .filter(row=>!productEqual(row.before,row.after)));
+   d.products=S.products;
+  }
+  if(!d.catalog)d.catalog=S.catalog||[];
+  for(const k of ["cphotos","expenses","closings","config","proofs"])if(!d[k])d[k]=S[k]||[];
+  S=d;save();render();
+ }catch(error){alert(error.message||"Backup inválido.")}
+}
 
 function modal(html){$("modal").innerHTML=`<div class="modal" onclick="if(event.target===this)closeM()"><div class="sheet">${html}</div></div>`}
 const closeM=()=>$("modal").innerHTML="";
@@ -586,8 +604,9 @@ function renderFl(){const raw=$("pq").value.trim(),q=norm(raw),L=FL.map((f,i)=>[
    +(q&&pModel()&&!FL.some(f=>norm(f)===q)?`<button class="g" style="margin-top:8px" onclick="pAddNew()">+ Adicionar “${esc(raw)}” ao catálogo</button>`:"")}
 function pTog(i,c){const f=FL[i];if(c)pSel[f]=pSel[f]??1;else delete pSel[f];renderFl()}
 function pAddNew(){const m=pModel(),f=$("pq").value.trim();if(!m||!f)return;if(!m.f.some(x=>norm(x)===norm(f)))m.f.push(f);save();FL=pFlavs(pBrand(),m);const nf=FL.find(x=>norm(x)===norm(f))||f;pSel[nf]=1;$("pq").value="";renderFl()}
+let productFormSnapshot,productFormOperation,productFormBusy=false;
 function prodForm(id){
-  const p=id?S.products.find(x=>x.id===id):null;pEdit=id||"";pSel={};pCur=p?p.flavor||"":"";tmpImg=p?p.img||"":"";
+  const p=id?S.products.find(x=>x.id===id):null;pEdit=id||"";productFormSnapshot=p?JSON.parse(JSON.stringify(p)):null;productFormOperation="stock-form-"+uid();pSel={};pCur=p?p.flavor||"":"";tmpImg=p?p.img||"":"";
   modal(`<h1>${p?"Editar":"Novo"} pod</h1>
   <div class="row"><img id="pv" class="thumb" style="width:72px;height:72px" ${tmpImg?`src="${tmpImg}"`:""}><div class="grow"><input type="file" accept="image/*" onchange="readImg(this,d=>{tmpImg=d;pv.src=d})"></div></div>
   <label>Marca</label><select id="pb" onchange="pbChange(1)"><option value="">— Outra (digitar o nome) —</option>${[...CATS()].sort(byName).map(b=>`<option value="${b.id}">${esc(b.name)}</option>`).join("")}</select>
@@ -600,7 +619,8 @@ function prodForm(id){
   const b=p&&p.brand&&CATS().find(x=>x.name===p.brand);if(b)$("pb").value=b.id;
   if($("pb").value)pbChange(0,p&&p.model);else pVis();
 }
-function saveProd(id){
+async function saveProd(id){
+  if(db&&cloudOn)return saveProductCloud(id);
   const cost=+$("pc").value||0,price=+$("pp").value||0,b=pBrand();
   if(b&&!id){
     const m=pModel();if(!m)return alert("Escolha o modelo");const ks=Object.keys(pSel);if(!ks.length)return alert("Marque pelo menos um sabor");
@@ -615,7 +635,14 @@ function saveProd(id){
   if(id)Object.assign(S.products.find(x=>x.id===id),o);else S.products.push({id:uid(),...o});
   save();closeM();render();
 }
-function delProd(id){if(confirm("Excluir pod? As vendas já feitas continuam.")){S.products=S.products.filter(p=>p.id!==id);save();closeM();render()}}
+async function delProd(id){if(confirm("Excluir pod? As vendas já feitas continuam.")){
+  if(db&&cloudOn)return submitProductOperation(async()=>{
+    const expected=productFormSnapshot?.id===id?productFormSnapshot:S.products.find(p=>p.id===id);
+    if(!expected)throw Error("Produto indisponível. Atualize a lista.");
+    await commitProductChanges([{id,before:expected,after:null}]);
+    closeM();render();
+  });
+  S.products=S.products.filter(p=>p.id!==id);save();closeM();render()}}
 
 let editId="";
 const redo=()=>!editId||$("rf").checked;
@@ -679,6 +706,7 @@ function saleDiscountToggle(){const on=$("discEnable").checked;$("discArea").sty
 function saleDiscountCalc(){if(!$("discEnable")?.checked)return;const base=Math.max(0,Number($("discBase").value)||0),percent=Math.min(100,Math.max(0,Number($("discPct").value)||0));const total=Math.round(base*(1-percent/100)*100)/100;$("sv2").value=total;$("discResult").textContent=`Desconto: ${money(base-total)}  •  Valor final: ${money(total)}`;prev()}
 
 function saveSale(){
+  if(db&&cloudOn&&!editId)return alert("Recarregue o Business para registrar a venda com estoque sincronizado.");
   const name=$("sn").value.trim(),price=+$("sv2").value;
   if(!name||!price)return alert("Informe o pod e o valor da venda");
   const pv_=$("sp").value,pid=pv_.startsWith("c:")?"":pv_,inst=curPlan();
@@ -973,9 +1001,177 @@ const chosen=menu.find(x=>x[0]===opPane)||menu[0];return `<div class="km-head"><
 /* ====== NUVEM (Firebase): cole aqui as chaves do seu projeto ====== */
 const FB={apiKey:"AIzaSyBuFjPwSwD9Fv7FgT68Pd-r7jfzBvuLH4o",authDomain:"agenda-vendas-9922a.firebaseapp.com",projectId:"agenda-vendas-9922a",appId:"1:345264054186:web:80a2fa55bd025f2b5a55d3"};
 let db=null,au=null,cloudOn=false,unsubs=[],last={products:{},sales:{},catalog:{},cphotos:{},expenses:{},closings:{},config:{},proofs:{}},ready={};
-function cloudSave(){
+// Rules can report a revision collision as permission-denied before Firestore retries it.
+async function runStockTransaction(action){
+  for(let attempt=0;;attempt++){
+    const revisions=new Map();
+    try{
+      return await db.runTransaction(tx=>{
+        revisions.clear();
+        return action({
+          async get(ref){
+            const snap=await tx.get(ref);
+            if(ref.parent?.id==="products")revisions.set(ref,snap.exists?(snap.data().stockRevision??0):null);
+            return snap;
+          },
+          set:(...args)=>tx.set(...args),update:(...args)=>tx.update(...args),delete:(...args)=>tx.delete(...args)
+        });
+      });
+    }catch(error){
+      if(error.code!=="permission-denied"||attempt>=2||!revisions.size)throw error;
+      const changed=await db.runTransaction(async tx=>{
+        const comparisons=await Promise.all([...revisions].map(async ([ref,version])=>{
+          const snap=await tx.get(ref);
+          return (snap.exists?(snap.data().stockRevision??0):null)!==version;
+        }));
+        return comparisons.some(Boolean);
+      });
+      if(!changed)throw error;
+    }
+  }
+}
+// Stock writes use the server version. Snapshot JSON is a comparison baseline, never a write payload.
+const productRecord=(data,id)=>data?{...data,id}:null;
+const productEqual=(a,b)=>{
+  if(!a||!b)return a===b;
+  return Object.keys(a).length===Object.keys(b).length&&Object.keys(a).every(k=>JSON.stringify(a[k])===JSON.stringify(b[k]));
+};
+function productWithStock(before,after){
+  if((!before||before.stock!==after.stock)&&(!Number.isSafeInteger(after.stock)||after.stock<0))throw Error("Informe um estoque inteiro e não negativo.");
+  return {...after,stockRevision:before&&before.stock===after.stock?(before.stockRevision??0):(before?.stockRevision??0)+1};
+}
+function applyProductState(id,record){
+  const index=S.products.findIndex(p=>p.id===id);
+  if(record&&index>=0)S.products[index]=record;
+  else if(record)S.products.push(record);
+  else if(index>=0)S.products.splice(index,1);
+  if(record)last.products[id]=JSON.stringify(record);else delete last.products[id];
+}
+async function commitProductChanges(changes,{seed=false}={}){
+  if(!changes.length)return;
+  const hasDeletes=changes.some(change=>!change.after);
+  if(changes.length+(hasDeletes?1:0)>500)throw Error("A operação excede o limite de gravações no estoque.");
+  const result=await runStockTransaction(async tx=>{
+    const rows=await Promise.all(changes.map(async change=>{
+      const ref=db.collection("products").doc(change.id),snap=await tx.get(ref);
+      return {...change,ref,live:productRecord(snap.exists?snap.data():null,change.id)};
+    }));
+    const deletions=[];
+    const outcomes=rows.map(({ref,id,before,after,live})=>{
+      if((seed&&live)||productEqual(live,after)||(after&&productEqual(live,productWithStock(before,after))))return {id,value:live};
+      if(!productEqual(live,before))throw Error("O produto mudou em outra sessão. Reabra e confira o estoque.");
+      if(after){const value=productWithStock(live,after);tx.set(ref,value);return {id,value}}
+      deletions.push([id,live?.stockRevision??0]);
+      tx.delete(ref);return {id,value:null};
+    });
+    if(deletions.length)tx.set(db.collection("config").doc("nexus-stock-deletion"),{
+      id:"nexus-stock-deletion",actor:au.currentUser.uid,at:firebase.firestore.FieldValue.serverTimestamp(),
+      revisions:Object.fromEntries(deletions)
+    });
+    return outcomes;
+  });
+  for(const {id,value} of result){
+    const shown=S.products.find(p=>p.id===id)||null;
+    const change=changes.find(x=>x.id===id);
+    if(productEqual(shown,change.before)||productEqual(shown,change.after))applyProductState(id,value);
+  }
+  try{localStorage.setItem(KEY,JSON.stringify(S))}catch{}
+}
+let productSyncPending=Promise.resolve();
+function syncLegacyProducts(seed=false){
+  if(!ready.products&&!seed)return;
+  const current=new Map(S.products.map(p=>[p.id,JSON.parse(JSON.stringify(p))]));
+  const ids=seed?[...current.keys()]:[...new Set([...current.keys(),...Object.keys(last.products)])];
+  const changes=ids.map(id=>({id,before:seed?null:JSON.parse(last.products[id]||"null"),after:current.get(id)||null}))
+    .filter(row=>!productEqual(row.before,row.after));
+  if(!changes.length)return productSyncPending;
+  const session=au?.currentUser?.uid;
+  productSyncPending=productSyncPending.then(async()=>{
+    if(!db||!cloudOn||session!==au?.currentUser?.uid)return;
+    try{await commitProductChanges(changes,{seed})}catch(error){
+      console.error(error);
+      alert("Não foi possível sincronizar a alteração no estoque: "+error.message);
+      // Refresh the local baseline after reverting only the conflicting optimistic edits.
+      await Promise.all(changes.map(async ({id,before,after})=>{
+        const shown=S.products.find(p=>p.id===id)||null;
+        if(!productEqual(shown,after))return;
+        const snap=await db.runTransaction(tx=>tx.get(db.collection("products").doc(id))).catch(()=>null);
+        if(productEqual(S.products.find(p=>p.id===id)||null,after)){
+          if(snap)applyProductState(id,productRecord(snap.exists?snap.data():null,id));
+          else if(productEqual(JSON.parse(last.products[id]||"null"),before))applyProductState(id,before);
+        }
+      }));
+      try{localStorage.setItem(KEY,JSON.stringify(S))}catch{}
+      if(!$("modal").innerHTML)render();
+    }
+  });
+  return productSyncPending;
+}
+async function submitProductOperation(action){
+  if(productFormBusy)return;
+  if(!ready.products)return alert("Aguarde a sincronização dos produtos.");
+  productFormBusy=true;
+  try{await action()}catch(error){alert(error.message)}finally{productFormBusy=false}
+}
+async function saveProductCloud(id){
+  return submitProductOperation(async()=>{
+    const cost=+$("pc").value||0,price=+$("pp").value||0,b=pBrand(),m=b?pModel():null;
+    const operation=productFormOperation,img=tmpImg;
+    if(b&&!id){
+      if(!m)throw Error("Escolha o modelo");
+      const flavors=Object.entries(pSel);
+      if(!flavors.length)throw Error("Marque pelo menos um sabor");
+      if(flavors.length>499)throw Error("Selecione até 499 sabores por operação.");
+      const variants=await Promise.all(flavors.map(async ([flavor,qty])=>{
+        if(!Number.isSafeInteger(qty)||qty<0)throw Error("Informe quantidades inteiras e não negativas.");
+        const name=b.name+" "+m.n+" – "+flavor;
+        const existing=S.products.find(p=>norm(p.name)===norm(name));
+        const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(norm(name)));
+        const id=existing?.id||"variant-"+Array.from(new Uint8Array(digest),v=>v.toString(16).padStart(2,"0")).join("");
+        return {id,name,brand:b.name,model:m.n,flavor,cost,price,stock:qty,img:img||cph(b.name,m.n,flavor),existing:!!existing};
+      }));
+      if(new Set(variants.map(v=>v.id)).size!==variants.length)throw Error("Confira os sabores repetidos.");
+      const marker=db.collection("config").doc(operation);
+      const fingerprint=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",
+        new TextEncoder().encode(JSON.stringify(variants.map(({existing,id,...variant})=>variant))))),v=>v.toString(16).padStart(2,"0")).join("");
+      const already=await runStockTransaction(async tx=>{
+        const saved=await tx.get(marker);
+        if(saved.exists){
+          if(saved.data().fingerprint!==fingerprint)throw Error("Este cadastro já foi salvo com outros dados. Abra um novo cadastro.");
+          return null;
+        }
+        const rows=await Promise.all(variants.map(async ({existing,...variant})=>{
+          const ref=db.collection("products").doc(variant.id),snap=await tx.get(ref);
+          if(!snap.exists&&existing)throw Error("Um produto foi removido em outra sessão. Reabra o cadastro.");
+          const live=snap.exists?snap.data():null;
+          if(live&&norm(live.name)!==norm(variant.name))throw Error("Um produto mudou em outra sessão. Reabra o cadastro.");
+          const value=live?{...live,id:variant.id,stock:Number(live.stock||0)+variant.stock,
+            ...(!live.brand?{brand:variant.brand,model:variant.model,flavor:variant.flavor}:{}),
+            ...(!live.img&&img?{img}:{})}:variant;
+          return {ref,value:productWithStock(live,value),existing:!!live};
+        }));
+        for(const row of rows)tx.set(row.ref,row.value);
+        tx.set(marker,{id:operation,type:"stock-form-operation",fingerprint});
+        return rows.filter(row=>row.existing).length;
+      });
+      closeM();render();
+      if(already)alert((variants.length-already)+" pod(s) criado(s). "+already+" já existiam: só somei o estoque (custo e preço ficaram como estavam).");
+      return;
+    }
+    const before=id?productFormSnapshot:null;
+    if(id&&before?.id!==id)throw Error("Reabra o produto para editar.");
+    const key=id||operation;
+    const after={...before,id:key,name:$("pn").value.trim(),cost,price,stock:+$("ps").value||0,img:tmpImg,
+      brand:b?.name||"",model:m?.n||"",flavor:b?pCur||"":""};
+    if(!after.name)throw Error("Dê um nome ao pod");
+    await commitProductChanges([{id:key,before,after}]);
+    closeM();render();
+  });
+}
+function cloudSave(seed=false){
   if(!db||!cloudOn)return;
-  ["products","sales","catalog","cphotos","expenses","closings","config","proofs"].forEach(c=>{
+  syncLegacyProducts(seed);
+  ["sales","catalog","cphotos","expenses","closings","config","proofs"].forEach(c=>{
     const cur={};(S[c]||[]).forEach(x=>cur[x.id]=JSON.stringify(x));
     Object.keys(cur).forEach(id=>{if(c==='sales'&&window.kmNexus?.managed(JSON.parse(cur[id])))return;if(last[c][id]!==cur[id]){last[c][id]=cur[id];db.collection(c).doc(id).set(JSON.parse(cur[id])).catch(e=>console.error(e))}});
     Object.keys(last[c]).forEach(id=>{if(!(id in cur)){if(c==='sales'&&window.kmNexus?.managed(JSON.parse(last[c][id])))return;delete last[c][id];db.collection(c).doc(id).delete().catch(e=>console.error(e))}});
@@ -1059,8 +1255,8 @@ function initCloud(){
   try{db.enablePersistence({synchronizeTabs:true}).catch(()=>{})}catch(e){}
   au.onAuthStateChanged(u=>{
     if(u){
-      authResetLoginPause();cloudOn=true;$("login").innerHTML="";
-      try{if(!localStorage.getItem(KEY+"_m")){cloudSave();localStorage.setItem(KEY+"_m","1")}}catch(e){}
+      authResetLoginPause();ready.products=false;cloudOn=true;$("login").innerHTML="";
+      try{if(!localStorage.getItem(KEY+"_m")){cloudSave(true);localStorage.setItem(KEY+"_m","1")}}catch(e){}
       listen();render();
     }else{cloudOn=false;unsubs.forEach(f=>f());unsubs=[];loginUI()}
   });

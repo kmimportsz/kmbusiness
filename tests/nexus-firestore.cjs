@@ -3,7 +3,7 @@ const {readFileSync}=require('node:fs');
 const assert=require('node:assert/strict');
 const vm=require('node:vm');
 const {initializeTestEnvironment,assertFails}=require('@firebase/rules-unit-testing');
-const {doc,getDoc,getDocs,setDoc,deleteDoc,collection,onSnapshot,runTransaction}=require('firebase/firestore');
+const {doc,getDoc,getDocs,setDoc,deleteDoc,collection,onSnapshot,runTransaction,serverTimestamp}=require('firebase/firestore');
 
 async function run(){
  const endpoint=/^(127\.0\.0\.1|localhost):(\d+)$/.exec(process.env.FIRESTORE_EMULATOR_HOST||'');
@@ -76,9 +76,17 @@ async function run(){
   for(const admin of [store,secondAdmin]){
    for(const table of ['products','sales','catalog','cphotos','expenses','closings','config','proofs']){
     const legacy=doc(admin,table,'legacy-permission-check');
-    await setDoc(legacy,{value:1});await setDoc(legacy,{value:2});
+    const stock=table==='products'?{stock:0,stockRevision:1}:{};
+    await setDoc(legacy,{...stock,value:1});await setDoc(legacy,{...stock,value:2});
     assert.equal((await getDoc(legacy)).data().value,2);
-    await deleteDoc(legacy);
+    if(table==='products'){
+     await assertFails(deleteDoc(legacy));
+     await runTransaction(admin,async tx=>{
+      tx.delete(legacy);
+      tx.set(doc(admin,'config','nexus-stock-deletion'),{actor:admin===store?'operator':'second-admin',
+       at:serverTimestamp(),revisions:{'legacy-permission-check':1}});
+     });
+    }else await deleteDoc(legacy);
    }
    await assertFails(getDoc(doc(admin,'nexusOperators','operator')));
    await assertFails(setDoc(doc(admin,'nexusOperators','self-grant'),{active:true}));
@@ -102,13 +110,20 @@ async function run(){
     }),error)
    }},
    runTransaction:fn=>runTransaction(firestore,tx=>fn({
-    async get(ref){const s=await tx.get(ref);return {exists:s.exists(),data:()=>s.data()}},set:(ref,data)=>tx.set(ref,JSON.parse(JSON.stringify(data))),update:(ref,data)=>tx.update(ref,JSON.parse(JSON.stringify(data)))
+    async get(ref){const s=await tx.get(ref);return {exists:s.exists(),data:()=>s.data()}},set:(ref,data)=>{
+     const clean=JSON.parse(JSON.stringify(data));
+     if(ref.id==='nexus-stock-deletion')clean.at=serverTimestamp();
+     return tx.set(ref,clean);
+    },delete:ref=>tx.delete(ref),update:(ref,data)=>tx.update(ref,JSON.parse(JSON.stringify(data)))
    }))
   });
+  const main=readFileSync('index.html','utf8');
+  const stockHelper=main.slice(main.indexOf('async function runStockTransaction'),main.indexOf('function cloudSave('));
   const context=page.getInternalVMContext();
   Object.assign(context,{db:adapter(store),au:{currentUser:{uid:'operator'}},cloudOn:true,tab:'home',unsubs:[],S:{sales:[],products:[]},
    today:()=> '2026-11-25',listen(){},pay(){},delSale(){},saleForm(){},saveSale(){},render(){},$:id=>page.window.document.getElementById(id),
    esc:String,money:String});
+  vm.runInContext(stockHelper,context);
   vm.runInContext(readFileSync('nexus-business.js','utf8').replace('if(authenticated())listen();',
    'window.testNexus={decide,writeSale,calculate,updateStock,readProducts};if(authenticated())listen();'),context);
   const {decide,writeSale,calculate,updateStock,readProducts}=context.testNexus;
@@ -176,10 +191,11 @@ async function run(){
   });
   const stockPage=new JSDOM('',{runScripts:'outside-only'});
   try{
-   const stockContext=stockPage.getInternalVMContext();
-   Object.assign(stockContext,{firebase:{},db:adapter(secondAdmin),au:{currentUser:{uid:'second-admin',email:emails[1]}},
+   const stockContext=stockPage.getInternalVMContext(),warnings=[];
+   Object.assign(stockContext,{firebase:{firestore:{FieldValue:{serverTimestamp}}},db:adapter(secondAdmin),au:{currentUser:{uid:'second-admin',email:emails[1]}},
     cloudOn:true,ready:{products:true,config:true},last:{products:{},config:{}},S:{products:[{id:'camiseta'}],config:[]},
-    KEY:'isolated-test',tab:'home',render(){}});
+    KEY:'isolated-test',tab:'home',render(){},alert:message=>warnings.push(message),console:{error(){}},$:()=>({innerHTML:''})});
+   vm.runInContext(stockHelper,stockContext);
    vm.runInContext(readFileSync('inventory3.js','utf8')
     .replace('const previousRender=render;', 'window.testCommitStock=commitStock;const previousRender=render;'),stockContext);
    const productRef=doc(secondAdmin,'products','camiseta');
@@ -190,9 +206,26 @@ async function run(){
     onSnapshot(doc(secondAdmin,'nexusOrders','stock-race'),s=>{if(s.exists())seen.push(['order',s.data().status])})
    ];
    try{
+    const stale={...(await getDoc(productRef)).data(),id:'camiseta'};
     const inbound={id:'test-inbound',kind:'inbound',reason:'Teste isolado',items:[{pid:'camiseta',qty:3,cost:38}]};
     await Promise.all([decide('stock-race',true,['camiseta'],1500,1500),stockContext.testCommitStock(inbound)]);
     await stockContext.testCommitStock(inbound);
+    assert.equal((await getDoc(productRef)).data().stock,7);
+    await assertFails(setDoc(productRef,{...stale,stock:10}));
+    await assert.rejects(stockContext.commitProductChanges([{id:'camiseta',before:stale,after:{...stale,stock:10}}]),/mudou em outra sessão/);
+    await assert.rejects(stockContext.commitProductChanges([{id:'camiseta',before:stale,after:null}]),/mudou em outra sessão/);
+    stockContext.S.products=[{...stale,stock:10}];
+    stockContext.last.products={camiseta:JSON.stringify(stale)};
+    await stockContext.syncLegacyProducts();
+    assert.match(warnings.at(-1),/mudou em outra sessão/);
+    assert.equal(stockContext.S.products[0].stock,7);
+    const removable={id:'remove-fresh',name:'Fixture removível',stock:0};
+    await stockContext.commitProductChanges([{id:removable.id,before:null,after:removable}]);
+    const fresh=(await getDoc(doc(secondAdmin,'products',removable.id))).data();
+    await stockContext.commitProductChanges([{id:removable.id,before:fresh,after:null}]);
+    await stockContext.commitProductChanges([{id:removable.id,before:fresh,after:null}]);
+    assert.equal((await getDoc(doc(secondAdmin,'products',removable.id))).exists(),false);
+    await assert.rejects(stockContext.testCommitStock({...inbound,items:[{...inbound.items[0],qty:4}]}),/outros dados/);
     assert.equal((await getDoc(productRef)).data().stock,7);
     await assert.rejects(stockContext.testCommitStock({id:'stale-count',kind:'count',reason:'Teste isolado',items:[{pid:'camiseta',qty:10,expected:6}]}),/estoque mudou/i);
     assert.equal((await getDoc(doc(secondAdmin,'config','stale-count'))).exists(),false);
@@ -200,6 +233,19 @@ async function run(){
     assert.ok(seen.some(([k,v])=>k==='stock'&&v===7));
     assert.ok(seen.some(([k,v])=>k==='sale'&&v===0));
     assert.ok(seen.some(([k,v])=>k==='order'&&v==='confirmed'));
+    const fields={pc:{value:'38'},pp:{value:'80'},pn:{value:'Camiseta A'},ps:{value:'10'}};
+    Object.assign(stockContext,{$:id=>fields[id]||{innerHTML:''},pBrand:()=>null,pCur:'',tmpImg:'',
+     productFormBusy:false,productFormSnapshot:stale,productFormOperation:'test-product-form',closeM(){}});
+    await stockContext.saveProductCloud('camiseta');
+    assert.match(warnings.at(-1),/mudou em outra sessão/);
+    assert.equal((await getDoc(productRef)).data().stock,7);
+    stockContext.productFormSnapshot=null;
+    fields.pn.value='Novo produto';
+    fields.ps.value='3';
+    await stockContext.saveProductCloud('');
+    await stockContext.saveProductCloud('');
+    assert.equal((await getDoc(doc(secondAdmin,'products','test-product-form'))).data().stock,3);
+    assert.equal((await getDoc(doc(secondAdmin,'products','test-product-form'))).data().stockRevision,1);
     assert.deepEqual((await getDoc(ref('sales','historical'))).data(),original.data());
    }finally{stops.forEach(fn=>fn())}
   }finally{stockPage.window.close()}

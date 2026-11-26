@@ -8,7 +8,31 @@ service cloud.firestore {
     }
     match /{rootCollection}/{document=**} {
       allow read, write: if legacyAdministrator()
-        && !(rootCollection in ['nexusOperators', 'nexusOrders', 'sales']);
+        && !(rootCollection in ['nexusOperators', 'nexusOrders', 'sales', 'products']);
+    }
+    match /products/{productId} {
+      allow read: if legacyAdministrator();
+      allow delete: if legacyAdministrator() && currentProductDeletion(productId);
+      allow create: if legacyAdministrator()
+        && request.resource.data.stock is int && request.resource.data.stock >= 0
+        && request.resource.data.stockRevision == 1;
+      allow update: if legacyAdministrator() && validStockUpdate();
+    }
+    match /products/{productId}/{subcollection}/{document=**} {
+      allow read, write: if legacyAdministrator();
+    }
+    function currentProductDeletion(productId) {
+      let operation = getAfter(/databases/$(database)/documents/config/nexus-stock-deletion).data;
+      return operation.at == request.time && operation.actor == request.auth.uid
+        && operation.revisions.get(productId, -1) == resource.data.get('stockRevision', 0);
+    }
+    function validStockUpdate() {
+      let prior = resource.data.get('stockRevision', 0);
+      let next = request.resource.data.get('stockRevision', 0);
+      return next is int && (
+        (request.resource.data.get('stock', null) == resource.data.get('stock', null) && next == prior)
+        || (request.resource.data.stock is int && request.resource.data.stock >= 0 && next == prior + 1)
+      );
     }
     match /sales/{saleId} {
       // The existing client subscribes to the whole collection. Keep reads for both administrators.

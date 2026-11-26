@@ -126,7 +126,7 @@ async function decide(id,accept,productIds=[],fee=0,reviewedShipping=null){
  if(!commercialId.test(id))fail('Pedido inválido.');
  const orderRef=ordersRef().doc(id),saleId='pedido-'+id,at=new Date().toISOString(),decisionActor=actor();
  const expected=accept?'confirmed':'cancelled';
- try{await db.runTransaction(async tx=>{
+ try{await runStockTransaction(async tx=>{
   const snap=await tx.get(orderRef);
   if(!snap.exists)fail('Pedido não encontrado.');
   const order=snap.data();
@@ -180,7 +180,7 @@ function updateStock(tx,products,before,after){
   if(!change)continue;
   const {ref,data}=products.get(id),stock=Number(data.stock)+change;
   if(!Number.isSafeInteger(stock)||stock<0)fail('Estoque insuficiente para '+data.name+'.');
-  tx.update(ref,{stock});
+  tx.update(ref,{stock,stockRevision:(data.stockRevision??0)+1});
   movements.push({pid:id,before:Number(data.stock),after:stock,delta:change});
  }
  return movements;
@@ -239,7 +239,7 @@ function editForm(sale){
 }
 async function writeSale(id,version,change,label,chargeIndex=null){
  const ref=saleRef(id),at=new Date().toISOString(),audit=event(label,at);
- try{await db.runTransaction(async tx=>{
+ try{await runStockTransaction(async tx=>{
   const snap=await tx.get(ref);
   const live=snap.data();
   if(!snap.exists||!managed(live)||live.revision!==version)fail('A venda foi atualizada. Reabra e confira.');
@@ -324,7 +324,7 @@ saveSale=async function(){
   if(!dateValid(date)||!validMoney(cents(sale.fees))||!validMoney(cents(sale.saleExpenses)))fail('Confira a data, as taxas e as despesas.');
   calculate(sale);
   const ref=saleRef(id);
-  await db.runTransaction(async tx=>{
+  await runStockTransaction(async tx=>{
    if((await tx.get(ref)).exists)return;
    const products=await readProducts(tx,[pid]);
    sale.events[0].stock=updateStock(tx,products,[],sale.items);tx.set(ref,sale);
