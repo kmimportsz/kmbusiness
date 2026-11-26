@@ -12,7 +12,9 @@
   "encryption": "AES-256",
   "encryptionVerifiedBeforeTransfer": true,
   "encryptedDownloadToIPhone": "concluído",
-  "encryptedFilePostDownloadSHA256": "pendente",
+  "encryptedFilePostDownloadSHA256": "a0e9aabb0832570dbaf09dc8ddd1325e58df679525a1ce1540b4eccd1f9c5cde",
   "originalLocation": "Diretório privado do Cloud Shell",
-  "billingEnabled": false
+  "billingEnabled": false,
+  "encryptedFilePostDownloadVerified": true,
+  "encryptedFileVerification": "SHA-256 calculado no Atalhos do iPhone; correspondência exata com o SHA-256 gerado pelo Cloud Shell, segundo o proprietário"
 }

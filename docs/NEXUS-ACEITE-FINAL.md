@@ -103,16 +103,16 @@ Evidências por ambiente: **C** suíte `catalogo/source`, **R** suíte da raiz, 
 | Homologação Firestore | B regras reais, projeto e operador de homologação |
 | Homologação Worker | B ambiente isolado com credenciais, catálogo e provedor de frete de homologação |
 | Backup Firestore de produção e restauração isolada | V · 137 documentos, SHA-256 e restauração confirmados pelo proprietário |
-| Cópia criptografada no iPhone | Download concluído · P comparação do SHA-256 do arquivo baixado |
+| Cópia criptografada no iPhone | V · SHA-256 do arquivo baixado no iPhone confirmou o SHA-256 do Cloud Shell |
 | Reversão no ambiente real | B homologação da configuração e conferência antes da liberação |
 | Parecer da IA Pessoal | B encaminhamento registrado, parecer independente pendente |
 | Publicação nos endereços originais e conferência pós-publicação | B condicionada aos itens técnicos e ao parecer independente |
 
 ## Evidência do backup de produção
 
-O proprietário confirmou a exportação de 137 documentos, a conferência do SHA-256 dos dados, a restauração isolada e o download no iPhone da cópia AES-256. O original permanece privado no Cloud Shell, com faturamento desativado. O SHA-256 do arquivo `.gpg` baixado ainda precisa ser comparado com o hash que o Cloud Shell imprimiu para esse mesmo arquivo criptografado. O hash dos dados restaurados tem outro escopo.
+O proprietário confirmou a exportação de 137 documentos, a conferência do SHA-256 dos dados, a restauração isolada e o download no iPhone da cópia AES-256. O original permanece privado no Cloud Shell, com faturamento desativado. O proprietário calculou o SHA-256 do arquivo `.gpg` no Atalhos do iPhone e confirmou que coincide com o hash do mesmo arquivo no Cloud Shell. A verificação da cópia baixada está concluída. O manifesto registra separadamente o hash do arquivo criptografado e o dos dados exportados.
 
-A evidência registra os resultados informados pelo proprietário. O arquivo e a senha permanecem fora do Git. A conferência da cópia no iPhone, a homologação real do Firestore e do Worker, a conciliação dos dados, o parecer independente e o aceite continuam condicionando a liberação. [Registro do backup de produção](nexus-evidencias/backup-firestore-producao.json)
+A evidência registra os resultados informados pelo proprietário. O arquivo e a senha permanecem fora do Git. A homologação real do Firestore e do Worker, a conciliação dos dados, o parecer independente e o aceite continuam condicionando a liberação. [Registro do backup de produção](nexus-evidencias/backup-firestore-producao.json)
 
 ## Preparação do backup, liberação e reversão
 
@@ -141,3 +141,9 @@ O código executado é o commit `e14b53d09f76c517d9e771b95836a3c63c72c90a`. Nest
 O catálogo independente do PR #4 segue publicado. Na candidata do PR #3, a resolução dos conflitos mantém o checkout integrado e a confirmação de pedido para a homologação. O verificador da candidata exige o endpoint de registro, a interface de confirmação e a igualdade entre a página pública e o arquivo-fonte.
 
 Passaram a suíte da raiz, a suíte do catálogo, o build e a verificação de sintaxe do Worker. No Firestore Emulator local, a rodada com dois administradores testou regras, sincronização, concorrência na entrada de estoque, confirmação e cancelamento de pedidos, repetição segura, recebimentos e preservação do histórico. Os testes usaram dados sintéticos.
+
+## Verificação final local e disponibilidade de homologação
+
+A suíte do Business, a suíte do catálogo, o build e a checagem de sintaxe do Worker passaram. Um Firestore Emulator novo e restrito a loopback validou as regras candidatas, a sincronização com dois administradores, a concorrência de estoque, pedidos, recebimentos e histórico. A execução do Worker nesse teste usa R2 e OAuth de teste.
+
+A consulta de leitura ao ambiente conectado não encontrou um Worker de homologação do K&M. O R2 da conta Cloudflare conectada retornou HTTP 403, código 10042. A prévia privada existente no Sites está acessível para inspeção, sem as variáveis `ORDER_FIRESTORE_PROJECT` e `ORDER_FIRESTORE_WRITER`. A homologação hospedada aguarda um projeto Firestore isolado e uma identidade de teste vinculada a essa prévia ou a outro Worker existente, com bucket isolado e sem dados de produção. O parecer independente do NEXUS e o aceite em iPhone físico continuam abertos. [Acessos necessários](NEXUS-HOMOLOGACAO-ACESSO.md)

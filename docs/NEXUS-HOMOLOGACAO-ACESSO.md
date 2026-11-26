@@ -16,10 +16,17 @@ A autorização do proprietário está registrada. Os acessos disponíveis nesta
 3. No painel de variáveis/segredos do ambiente isolado, configure `ORDER_FIRESTORE_PROJECT` para o ID de homologação e `ORDER_FIRESTORE_WRITER` como segredo. Configure o provedor de frete com dados de teste e informe os endereços de origem permitidos para o teste.
 4. A homologação verifica o contrato público, autenticação de operadores, corrida de confirmação, estoque, cobranças, timeout, retry e frete, com dados fictícios. A liberação dos endereços oficiais vem depois.
 
-## Exportação de produção sem alterar registros
+## Backup e evidência de restauração
 
-1. A opção com menor privilégio é o proprietário executar **Google Cloud → Firestore → Import/Export → Export** no projeto e banco de produção e salvar em um bucket privado autorizado para esse projeto. Para delegar essa operação, prefira uma função temporária contendo a permissão de exportação do Firestore e leitura do estado da operação, sem autorização para importar em produção. Configure para o agente de serviço do Firestore somente o acesso necessário ao bucket de destino. Conserve o identificador da operação, a data, o URI privado e as contagens.
-2. Para o catálogo, conceda leitura/listagem temporária do bucket R2 oficial, sem escrita ou apagamento, ou exporte os objetos como proprietário para armazenamento privado. Inclua o catálogo, fotos, snapshots, metadados e as configurações/versões necessárias à reversão. O backup público já verificado cobre somente objetos que o catálogo referencia.
-3. Autorize leitura do backup no ambiente de restauração e permissão de importação apenas no Firestore **isolado**. Valide manifestos, hashes e contagens antes e depois e mantenha o arquivo de produção fora do Git e fora do chat. Ao concluir, revogue as concessões temporárias.
+O backup de documentos do Firestore de produção foi concluído pela API REST,
+sem faturamento. O proprietário confirmou a restauração isolada dos 137 documentos
+e a igualdade do SHA-256 da cópia AES-256 baixada no iPhone. O material
+permanece privado. [Registro de evidências](nexus-evidencias/backup-firestore-producao.json)
+
+Para o catálogo, continua pendente o inventário privado necessário à reversão.
+Acesso temporário de leitura e listagem ao bucket R2 oficial permite conferir
+catálogo, fotos, snapshots e metadados sem alterar objetos. A cópia pública já
+verificada cobre somente os objetos referenciados pelo catálogo. As configurações
+e versões do Worker devem ser conferidas pelo titular antes de qualquer mudança.
 
 Identificadores de projetos e URLs privadas podem ser informados nesta conversa. Use o canal de segredos do provedor para qualquer credencial.
