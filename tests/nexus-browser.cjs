@@ -22,6 +22,14 @@ const fs=require('node:fs');
   page.on('pageerror',e=>error=e);
   await page.route('**/*',async route=>{
    const u=new URL(route.request().url());
+   if(u.origin===origin&&u.pathname.endsWith('/assets/order-firestore.js')){
+    return route.fulfill({contentType:'text/javascript',body:`export async function submitOrder(order){
+     const response=await fetch('https://catalog.example.invalid/api/orders',{method:'POST',body:JSON.stringify({
+      key:order.key,name:order.customer,notes:order.notes
+     })});
+     return {...await response.json(),fingerprint:order.fingerprint};
+    }`});
+   }
    if(u.origin===origin)return route.continue();
    if(u.pathname==='/images/one')return route.fulfill({contentType:'image/svg+xml',body:
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300"><rect width="300" height="300" fill="#172030"/><path d="M107 63l-41 18-29 45 38 22 20-19v112h110V129l20 19 38-22-29-45-41-18c-10 26-76 26-86 0z" fill="#b9c4d6" stroke="#70849e" stroke-width="4"/></svg>'});
@@ -221,7 +229,7 @@ const fs=require('node:fs');
   await page.addInitScript(()=>{
    const users={uid:'operator',email:'operator@example.invalid'};
    const state={
-    products:{camiseta:{id:'camiseta',name:'Camiseta A',brand:'Marca fictícia',stock:5,cost:38,catalogId:'camiseta'}},
+    products:{camiseta:{id:'camiseta',name:'Camiseta A',brand:'Marca fictícia',stock:5,cost:38,price:80,catalogId:'camiseta'}},
     sales:{},catalog:{},cphotos:{},expenses:{},closings:{},config:{},proofs:{},
     nexusOrders:{test:{code:'A'.repeat(32),status:'pending',customer:'Pessoa Teste',createdAt:'2026-11-25T12:00:00.000Z',
      items:[{id:'camiseta',brand:'Marca fictícia',model:'Camiseta A',size:'M',quantity:1,priceCents:8000}],

@@ -737,11 +737,13 @@ confirmOrderButton.onclick=async e=>{
  if(deliveryMode==='delivery'&&!validateDeliveryAddress())return checkoutGuidance('Confira os dados da entrega.');
  const body={
   name:customerDetails().name,mode:deliveryMode,address:deliveryMode==='delivery'?deliveryFields():null,notes:orderNotes(),
-  items:chosenItems().map(p=>({id:p.id,quantity:itemQuantity(p),priceCents:Math.round(p.price*100)}))
+  items:chosenItems().map(p=>({id:p.id,brand:p.brand,model:p.model,size:p.size||'',quantity:itemQuantity(p),priceCents:Math.round(p.price*100)}))
+   .sort((a,b)=>a.id.localeCompare(b.id))
  };
  orderSubmitting=true;confirmOrderButton.setAttribute('aria-busy','true');
  $('checkoutHelp').textContent='';
  orderResult.dataset.state='waiting';orderResult.showModal();$('nexusWaiting').focus();
+ let orderCancelTimeout;
  try{
   const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(body)));
   const fingerprint=Array.from(new Uint8Array(digest),n=>n.toString(16).padStart(2,'0')).join('');
@@ -751,11 +753,18 @@ confirmOrderButton.onclick=async e=>{
   const key=previous?.key||crypto.randomUUID();
   activeOrderKey={fingerprint,key};
   try{sessionStorage.setItem(orderKeyStorage,JSON.stringify(activeOrderKey))}catch{}
-  const receipt=await api('/api/orders',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...body,key}),signal:AbortSignal.timeout(22000)});
-  if(receipt?.code!==key.replace(/-/g,'').toUpperCase()||!Array.isArray(receipt.items)||!receipt.items.length||
-    !Number.isSafeInteger(receipt.subtotalCents)||(receipt.shippingCents!==null&&!Number.isSafeInteger(receipt.shippingCents))){
-   throw Error('O servidor não confirmou o registro. Tente novamente.');
-  }
+  const {submitOrder}=await import('./assets/order-firestore.js');
+  const order={key,code:key.replace(/-/g,'').toUpperCase(),customer:body.name,mode:body.mode,
+   address:body.address,notes:body.notes,items:body.items,
+   subtotalCents:body.items.reduce((total,item)=>total+item.quantity*item.priceCents,0),
+   shippingCents:body.mode==='pickup'?0:null,fingerprint};
+  const stored=await Promise.race([submitOrder(order),new Promise((_,reject)=>{
+   const timeout=setTimeout(()=>reject(new DOMException('Tempo de resposta excedido.','TimeoutError')),22000);
+   // The mutation may finish after the UI times out. Retries use the same key.
+   orderCancelTimeout=()=>clearTimeout(timeout);
+  })]);
+  if(stored?.code!==order.code||stored.fingerprint!==fingerprint)throw Error('Não foi possível confirmar este pedido.');
+  const receipt={...stored,phone:data.phone};
   activeOrderKey.confirmed=true;
   try{sessionStorage.setItem(orderKeyStorage,JSON.stringify(activeOrderKey))}catch{}
   renderOrderResult(receipt);
@@ -764,6 +773,7 @@ confirmOrderButton.onclick=async e=>{
   checkoutGuidance(error.name==='TimeoutError'?'A confirmação demorou. Tente novamente.':error.message||'Tente registrar o pedido novamente.');
   confirmOrderButton.focus();
  }finally{
+  orderCancelTimeout?.();
   orderSubmitting=false;confirmOrderButton.removeAttribute('aria-busy');
  }
 };

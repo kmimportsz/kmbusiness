@@ -3,7 +3,7 @@ const html=fs.readFileSync('public/catalogo.html','utf8');new vm.Script(html.mat
 assert.ok(html.includes('https://km-camisetas-catalogo.inventivetoucan16.chatgpt.site\'+path'));
 assert.ok(!html.includes('id="privacyChoice"'));assert.ok(html.includes('/api/catalog-visit'));assert.ok(!html.includes('/api/telemetry'));
 assert.ok(!html.includes('id="insightsPanel"'));
-assert.ok(html.includes('/api/orders'),'A candidata integrada deve registrar o pedido.');
+assert.ok(html.includes('./assets/order-firestore.js')&&!html.includes('/api/orders'),'Pedidos devem usar o Firestore diretamente.');
 assert.ok(html.includes('id="nexusResult"'),'A candidata deve exibir o resultado do registro.');
 assert.equal(html,fs.readFileSync('../index.html','utf8'),'Página publicada e fonte devem coincidir.');
 const admin=fs.readFileSync('public/catalogoadm.html','utf8');assert.ok(admin.includes('noindex,nofollow'));assert.ok(admin.includes('url=https://km-camisetas-catalogo.inventivetoucan16.chatgpt.site/admin'));assert.ok(!admin.includes('token'));

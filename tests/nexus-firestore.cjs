@@ -3,7 +3,7 @@ const {readFileSync}=require('node:fs');
 const assert=require('node:assert/strict');
 const vm=require('node:vm');
 const {initializeTestEnvironment,assertFails}=require('@firebase/rules-unit-testing');
-const {doc,getDoc,getDocs,setDoc,deleteDoc,collection,onSnapshot,runTransaction,serverTimestamp}=require('firebase/firestore');
+const {doc,getDoc,getDocs,setDoc,deleteDoc,collection,onSnapshot,runTransaction,serverTimestamp,writeBatch}=require('firebase/firestore');
 
 async function run(){
  const endpoint=/^(127\.0\.0\.1|localhost):(\d+)$/.exec(process.env.FIRESTORE_EMULATOR_HOST||'');
@@ -27,40 +27,19 @@ async function run(){
    const db=context.firestore();
    await Promise.all([
     setDoc(doc(db,'nexusOperators','operator'),{active:true}),
+    setDoc(doc(db,'nexusOrderControl','intake'),{enabled:true}),
     setDoc(doc(db,'nexusOperators','second-admin'),{active:true}),
     setDoc(doc(db,'nexusOperators','unlisted'),{active:true}),
-    setDoc(doc(db,'products','camiseta'),{name:'Camiseta A',stock:7,cost:38,catalogId:'camiseta'}),
+    setDoc(doc(db,'products','camiseta'),{name:'Camiseta A',stock:7,cost:38,price:80,catalogId:'camiseta'}),
     setDoc(doc(db,'sales','historical'),{id:'historical',price:42,inst:[{v:42,paid:true}]}),
     ...['first','second','third'].map(id=>setDoc(doc(db,'nexusOrders',id),order))
    ]);
   });
 
-  // Route the production adapter to the emulator. No Google API or storage is contacted.
-  const {generateKeyPairSync}=require('node:crypto');
-  const worker=(await import('../catalogo/source/worker/index.js')).default;
   const testId='3b697038-fcac-447d-a96c-7b60127c9d07';
-  const {privateKey}=generateKeyPairSync('rsa',{modulusLength:2048,privateKeyEncoding:{type:'pkcs8',format:'pem'}});
-  const nativeFetch=global.fetch;
-  global.fetch=async(url,options={})=>{
-   const endpoint=new URL(url);
-   if(endpoint.origin==='https://oauth2.googleapis.com')return Response.json({access_token:'owner',expires_in:3600});
-   if(endpoint.origin==='https://firestore.googleapis.com')return nativeFetch('http://'+process.env.FIRESTORE_EMULATOR_HOST+endpoint.pathname+endpoint.search,options);
-   if(endpoint.hostname!=='127.0.0.1'&&endpoint.hostname!=='localhost')throw Error('Rede externa bloqueada no teste.');
-   return nativeFetch(url,options);
-  };
-  try{
-   const env={ORDER_FIRESTORE_WRITER:JSON.stringify({client_email:'worker@example.invalid',private_key:privateKey}),
-    ORDER_FIRESTORE_PROJECT:'demo-nexus',BUCKET:{get:async()=>({json:async()=>({
-     products:[{id:'camiseta',brand:'Marca Teste',model:'Camiseta A',size:'M',price:80}],phone:'5511999999999'
-    })})}};
-   const valid=()=>new Request('https://catalog.example.invalid/api/orders',{
-    method:'POST',headers:{origin:'https://kmimportsz.github.io','content-type':'application/json'},
-    body:JSON.stringify({key:testId,mode:'pickup',name:'Pessoa Teste',items:[{id:'camiseta',quantity:2,priceCents:8000}]})
-   });
-   const replies=await Promise.all([worker.fetch(valid(),env),worker.fetch(valid(),env)]);
-   assert.deepEqual(replies.map(r=>r.status),[201,201]);
-   assert.deepEqual(await replies[0].json(),await replies[1].json());
-  }finally{global.fetch=nativeFetch}
+  await environment.withSecurityRulesDisabled(async context=>{
+   await setDoc(doc(context.firestore(),'nexusOrders',testId),order);
+  });
   const anon=environment.unauthenticatedContext().firestore();
   const nonOperator=environment.authenticatedContext('other').firestore();
   await assertFails(getDoc(doc(anon,'nexusOrders','first')));
@@ -249,6 +228,62 @@ async function run(){
     assert.deepEqual((await getDoc(ref('sales','historical'))).data(),original.data());
    }finally{stops.forEach(fn=>fn())}
   }finally{stockPage.window.close()}
+  const buyerContext=uid=>environment.authenticatedContext(uid,{firebase:{sign_in_provider:'anonymous',identities:{}}}).firestore();
+  const buyer=buyerContext('BuyerTest'), otherBuyer=buyerContext('OtherBuyer');
+  const submitBuyer=(client,uid,key,patch={})=>{
+   const id=uid+'_'+key,batch=writeBatch(client);
+   batch.set(doc(client,'nexusOrders',id),{
+    key,code:key.replaceAll('-','').toUpperCase(),customer:'Cliente teste',mode:'pickup',address:null,notes:'',
+    itemsJSON:JSON.stringify(order.items),subtotalCents:16000,shippingCents:0,fingerprint:'a'.repeat(64),
+    status:'pending',createdAt:serverTimestamp(),...patch
+   });
+   batch.set(doc(client,'nexusOrderQuota',uid),{id,at:serverTimestamp()});
+   return batch.commit();
+  };
+  const directKey='0e9155ef-30d9-4d65-bb45-26a2b0897574',directId='BuyerTest_'+directKey;
+  assert.equal((await getDoc(doc(buyer,'nexusOrders',directId))).exists(),false);
+  const {persistOrder}=await import('../catalogo/assets/order-firestore.js');
+  const buyerSdk={...require('firebase/firestore'),db:buyer,uid:'BuyerTest'};
+  const directOrder={key:directKey,code:directKey.replaceAll('-','').toUpperCase(),customer:'Cliente teste',
+   mode:'pickup',address:null,notes:'',items:order.items,subtotalCents:16000,shippingCents:0,fingerprint:'a'.repeat(64)};
+  const concurrentBuyer=await Promise.all([persistOrder(buyerSdk,directOrder),persistOrder(buyerSdk,directOrder)]);
+  assert.ok(concurrentBuyer.every(receipt=>receipt.code===directOrder.code&&receipt.fingerprint===directOrder.fingerprint));
+  assert.equal((await persistOrder(buyerSdk,directOrder)).code,directOrder.code);
+  await assertFails(getDoc(doc(otherBuyer,'nexusOrders',directId)));
+  await assertFails(getDocs(collection(buyer,'nexusOrders')));
+  await assertFails(getDoc(doc(buyer,'products','camiseta')));
+  await assertFails(setDoc(doc(buyer,'nexusOrders',directId),{status:'confirmed'},{merge:true}));
+  await assertFails(submitBuyer(buyer,'BuyerTest','0e9155ef-30d9-4d65-bb45-26a2b0897575'));
+  const otherKey='0e9155ef-30d9-4d65-bb45-26a2b0897576';
+  await assertFails(submitBuyer(otherBuyer,'OtherBuyer',otherKey,{status:'confirmed'}));
+  await assertFails(submitBuyer(otherBuyer,'OtherBuyer',otherKey,{itemsJSON:'x'.repeat(24001)}));
+  await assertFails(submitBuyer(otherBuyer,'OtherBuyer',otherKey,{shippingCents:1}));
+  await submitBuyer(otherBuyer,'OtherBuyer',otherKey,{itemsJSON:JSON.stringify(Array.from({length:30},(_,i)=>({...order.items[0],id:'item-'+i})))});
+  await decide('OtherBuyer_'+otherKey,false);
+  const buyerReceipt=(await getDoc(doc(buyer,'nexusOrders',directId))).data();
+  assert.equal(buyerReceipt.status,'pending');
+  assert.equal(typeof buyerReceipt.createdAt.toMillis(),'number');
+  await Promise.all([decide(directId,true,['camiseta'],0,0),decide(directId,true,['camiseta'],0,0)]);
+  assert.equal((await getDoc(doc(secondAdmin,'nexusOrders',directId))).data().status,'confirmed');
+  assert.equal((await getDoc(doc(secondAdmin,'sales','pedido-'+directId))).data().price,160);
+  assert.equal((await getDoc(doc(secondAdmin,'products','camiseta'))).data().stock,5);
+  const rejectedBuyer=buyerContext('RejectedBuyer');
+  const rejectedKey='0e9155ef-30d9-4d65-bb45-26a2b0897577';
+  const rejectedId='RejectedBuyer_'+rejectedKey;
+  await submitBuyer(rejectedBuyer,'RejectedBuyer',rejectedKey,{itemsJSON:JSON.stringify([{...order.items[0],priceCents:1}])});
+  await assert.rejects(decide(rejectedId,true,['camiseta'],0,0),/preço do estoque/);
+  assert.equal((await getDoc(ref('sales','pedido-'+rejectedId))).exists(),false);
+  await environment.withSecurityRulesDisabled(async context=>{
+   await setDoc(doc(context.firestore(),'nexusOrderControl','intake'),{enabled:false});
+  });
+  await assertFails(setDoc(doc(store,'nexusOrderControl','intake'),{enabled:true}));
+  const stoppedBuyer=buyerContext('StoppedBuyer');
+  await assertFails(submitBuyer(stoppedBuyer,'StoppedBuyer',rejectedKey));
+  assert.equal((await getDoc(doc(buyer,'nexusOrders',directId))).data().status,'confirmed');
+  await decide(rejectedId,false);
+  assert.equal((await getDoc(doc(secondAdmin,'nexusOrders',rejectedId))).data().status,'cancelled');
+  assert.equal((await getDoc(doc(secondAdmin,'products','camiseta'))).data().stock,5);
+  console.log('PASS cliente Firestore: criação anônima restrita, 30 itens, corrida, isolamento e venda/estoque.');
   context.unsubs.forEach(fn=>fn());
   console.log('PASS emulador: regras, contador, confirmação e cancelamento concorrentes, retry, estoque, edição concorrente, recebimento, histórico, entrada concorrente e sincronização de dois administradores.');
  }finally{page.window.close();await environment.cleanup()}

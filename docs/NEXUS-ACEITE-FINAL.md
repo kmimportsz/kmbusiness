@@ -191,3 +191,11 @@ da prévia e do runtime hospedado permanece aberta, incluindo segredo no
 Sites, bucket isolado, autenticação dos operadores e jornada no Safari
 físico. A inspeção da prévia confirmou o projeto de homologação configurado
 e a ausência do segredo do Worker.
+
+## Mudança da integração para Firebase direto
+
+A candidata atual registra pedidos no Firestore com Firebase Auth anônimo
+e mantém aprovação e recusa no Business. A venda e a baixa de estoque
+continuam atômicas. A integração de pedidos dispensa Worker, R2 e segredo
+de conta de serviço. Os serviços já usados pelo catálogo para exibir
+produtos, fotos e cotação permanecem. [Arquitetura, testes e reversão](NEXUS-FIREBASE-DIRETO.md)

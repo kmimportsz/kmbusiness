@@ -9,6 +9,17 @@ const authenticated=()=>Boolean(db&&cloudOn&&au?.currentUser);
 const cents=n=>Math.round(Number(n)*100);
 const currency=n=>money(n/100);
 const validMoney=n=>Number.isSafeInteger(n)&&n>=0&&n<=1000000000;
+const orderTime=value=>typeof value==='string'?Date.parse(value)||0:value?.toMillis?.()||0;
+const validOrderItem=i=>i&&typeof i.id==='string'&&commercialId.test(i.id)&&
+ ['brand','model','size'].every(key=>typeof i[key]==='string'&&i[key].length<=100)&&
+ Number.isInteger(i.quantity)&&i.quantity>=1&&i.quantity<=99&&validMoney(i.priceCents);
+function orderItems(order){
+ if(typeof order.itemsJSON!=='string')return Array.isArray(order.items)?order.items:[];
+ try{
+  const items=JSON.parse(order.itemsJSON);
+  return Array.isArray(items)&&items.length<=30?items:[];
+ }catch{return []}
+}
 const pendingCount=()=>orderRows.filter(x=>x.status==='pending').length;
 const actor=()=>au.currentUser.uid;
 const event=(label,at)=>({id:crypto.randomUUID(),label,at,actor:actor()});
@@ -55,7 +66,7 @@ listen=function(){
  detachOrders=ordersRef().onSnapshot({includeMetadataChanges:true},sn=>{
   if(sn.metadata.fromCache)return;
   const previous=heardOrders.size;
-  orderRows=sn.docs.map(d=>({...d.data(),id:d.id})).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+  orderRows=sn.docs.map(d=>{const row=d.data();return {...row,id:d.id,items:orderItems(row)}}).sort((a,b)=>orderTime(b.createdAt)-orderTime(a.createdAt));
   const unread=orderRows.some(o=>o.status==='pending'&&!heardOrders.has(o.id));
   if((orderReady||previous)&&unread)chime();
   orderRows.forEach(o=>heardOrders.add(o.id));
@@ -75,11 +86,11 @@ function ordersView(){
   (!authenticated()?'Entre para consultar pedidos.':orderReady?pendingCount()+' pedido(s) pendente(s)':'Sincronizando pedidos…'))+'</p>'+
   (authenticated()?'<button type="button" class="g" data-nexus-action="sound">'+(sound?.state==='running'?'Desativar som':'Ativar som')+'</button>':'')+
   orderRows.map(o=>'<details class="card item" data-order-row="'+esc(o.id)+'"><summary><b>'+esc(o.code)+'</b> · '+esc(o.customer)+' · '+esc(status[o.status]||o.status)+'</summary>'+
-   o.items.map(i=>'<div class="inst">'+esc(i.quantity+' × '+[i.brand,i.model,i.size].filter(Boolean).join(' · '))+'<b>'+currency(i.quantity*i.priceCents)+'</b></div>').join('')+
-   '<p>Subtotal '+currency(o.subtotalCents)+' · '+(o.mode==='pickup'?'Retirada':o.shippingCents===null?'Entrega a conferir':'Entrega '+currency(o.shippingCents))+'</p>'+
+   o.items.filter(validOrderItem).map(i=>'<div class="inst">'+esc(i.quantity+' × '+[i.brand,i.model,i.size].filter(Boolean).join(' · '))+'<b>'+currency(i.quantity*i.priceCents)+'</b></div>').join('')+
+   '<p>Subtotal '+currency(o.items.filter(validOrderItem).reduce((total,i)=>total+i.quantity*i.priceCents,0))+' · '+(o.mode==='pickup'?'Retirada':o.shippingCents===null?'Entrega a conferir':'Entrega '+currency(o.shippingCents))+'</p>'+
    (o.address?'<p>'+esc([o.address.street,o.address.number,o.address.cep,o.address.reference].filter(Boolean).join(' · '))+'</p>':'')+
    (o.notes?'<p>'+esc(o.notes)+'</p>':'')+
-   (o.status==='pending'?'<div class="row">'+button('cancel',o.id,'Cancelar')+button('confirm',o.id,'Confirmar')+'</div>':'')+'</details>').join('')+'</section>';
+   (o.status==='pending'?'<div class="row">'+button('cancel',o.id,'Recusar')+(o.items.length&&o.items.every(validOrderItem)?button('confirm',o.id,'Confirmar'):'<span>Pedido com itens inválidos.</span>')+'</div>':'')+'</details>').join('')+'</section>';
 }
 function button(action,id,label){
  return '<button type="button" class="g" data-nexus-action="'+action+'" data-nexus-id="'+esc(id)+'">'+label+'</button>';
@@ -114,11 +125,6 @@ function confirmForm(order){
  form('Confirmar pedido',fields+(order.shippingCents===null?field('fee','Frete conferido (R$)','','number','required min="0" step=".01"'):'')+
   '<p>Confira os produtos vinculados. A confirmação registra a venda e baixa o estoque.</p>',
   async data=>{
-   const response=await fetch('https://km-camisetas-catalogo.inventivetoucan16.chatgpt.site/api/catalog',{signal:AbortSignal.timeout(10000)});
-   if(!response.ok)fail('Não foi possível conferir o catálogo atualizado.');
-   const catalog=await response.json();
-   if(!order.items.every(i=>catalog.products.some(p=>p.id===i.id&&p.available!==false&&cents(p.price)===i.priceCents&&
-    [p.brand,p.model,p.size||''].join('|')===[i.brand,i.model,i.size].join('|'))))fail('Preço ou disponibilidade mudou. Solicite uma nova revisão do comprador.');
    return decide(order.id,true,order.items.map((_,n)=>data.get('p'+n)),order.shippingCents??cents(data.get('fee')),order.shippingCents);
   });
 }
@@ -129,7 +135,7 @@ async function decide(id,accept,productIds=[],fee=0,reviewedShipping=null){
  try{await runStockTransaction(async tx=>{
   const snap=await tx.get(orderRef);
   if(!snap.exists)fail('Pedido não encontrado.');
-  const order=snap.data();
+  const stored=snap.data(),order={...stored,items:orderItems(stored)};
   if(order.status===expected)return;
   if(order.status!=='pending')fail('Este pedido já foi encerrado.');
   if(!accept){
@@ -140,10 +146,13 @@ async function decide(id,accept,productIds=[],fee=0,reviewedShipping=null){
   if(productIds.length!==order.items.length||productIds.some(id=>!commercialId.test(id)))fail('Vincule todos os itens ao estoque.');
   const ref=saleRef(saleId);
   if((await tx.get(ref)).exists)fail('Já existe uma venda vinculada.');
+  if(!order.items.length||!order.items.every(validOrderItem))fail('O pedido contém itens inválidos.');
+  if(new Set(order.items.map(i=>i.id)).size!==order.items.length)fail('O pedido contém itens duplicados.');
   const products=await readProducts(tx,productIds);
   const items=order.items.map((i,n)=>{
    const p=products.get(productIds[n]).data;
    if(p.catalogId&&p.catalogId!==i.id)fail('O produto vinculado pertence a outro item do catálogo.');
+   if(p.price==null||!validMoney(cents(p.price))||cents(p.price)!==i.priceCents)fail('O preço do estoque diverge do pedido. Confira antes de confirmar.');
    if(!validMoney(cents(p.cost)))fail('Confira o custo cadastrado no estoque.');
    return {pid:productIds[n],name:[i.brand,i.model,i.size].filter(Boolean).join(' · '),quantity:i.quantity,priceCents:i.priceCents,costCents:cents(p.cost)};
   });
@@ -282,7 +291,7 @@ document.addEventListener('click',async e=>{
  const o=orderRows.find(s=>s.id===id),s=S.sales.find(s=>s.id===id);
  if(action==='sound')return toggleSound(el);
  if(action==='confirm')return confirmForm(o);
- if(action==='cancel'&&o&&authenticated()&&confirm('Cancelar este pedido e manter o histórico?')){
+ if(action==='cancel'&&o&&authenticated()&&confirm('Recusar este pedido e manter o histórico?')){
   el.disabled=true;
   try{await decide(id,false)}catch(error){alert(error.message)}finally{el.disabled=false}
  }

@@ -8,7 +8,7 @@ service cloud.firestore {
     }
     match /{rootCollection}/{document=**} {
       allow read, write: if legacyAdministrator()
-        && !(rootCollection in ['nexusOperators', 'nexusOrders', 'sales', 'products']);
+        && !(rootCollection in ['nexusOperators', 'nexusOrders', 'nexusOrderControl', 'nexusOrderQuota', 'sales', 'products']);
     }
     match /products/{productId} {
       allow read: if legacyAdministrator();
@@ -53,8 +53,57 @@ service cloud.firestore {
     match /nexusOperators/{uid} {
       allow read, write: if false;
     }
+    function anonymousBuyer() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider == 'anonymous'
+        && request.auth.uid.matches('^[A-Za-z0-9]{1,80}$');
+    }
+    function intakeEnabled() {
+      return get(/databases/$(database)/documents/nexusOrderControl/intake).data.enabled == true;
+    }
+    function buyerOrderId(orderId) {
+      return orderId.matches('^' + request.auth.uid + '_[a-f0-9-]{36}$');
+    }
+    function shortText(value, minimum, maximum) {
+      return value is string && value.size() >= minimum && value.size() <= maximum;
+    }
+    function orderAddress(address) {
+      return address is map && address.keys().hasOnly(['cep', 'street', 'number', 'reference'])
+        && address.cep is string && address.cep.matches('^[0-9]{8}$')
+        && shortText(address.street, 3, 160)
+        && address.number is string && address.number.matches('^[0-9]{1,6}[A-Za-z]?$')
+        && shortText(address.reference, 0, 180);
+    }
+    function validBuyerOrder(orderId) {
+      let order = request.resource.data;
+      let quota = getAfter(/databases/$(database)/documents/nexusOrderQuota/$(request.auth.uid)).data;
+      return order.keys().hasOnly(['key', 'code', 'customer', 'mode', 'address', 'notes', 'itemsJSON',
+          'subtotalCents', 'shippingCents', 'fingerprint', 'status', 'createdAt'])
+        && order.key is string && order.key.matches('^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$')
+        && orderId == request.auth.uid + '_' + order.key
+        && order.code == order.key.replace('-', '').upper()
+        && order.fingerprint is string && order.fingerprint.matches('^[a-f0-9]{64}$')
+        && order.status == 'pending' && order.createdAt == request.time
+        && shortText(order.customer, 3, 120) && shortText(order.notes, 0, 500)
+        && order.subtotalCents is int && order.subtotalCents >= 0 && order.subtotalCents <= 1000000000
+        && ((order.mode == 'pickup' && order.address == null && order.shippingCents == 0)
+          || (order.mode == 'delivery' && orderAddress(order.address) && order.shippingCents == null))
+        && shortText(order.itemsJSON, 2, 24000)
+        && quota.id == orderId && quota.at == request.time;
+    }
+    match /nexusOrderQuota/{uid} {
+      allow create, update: if anonymousBuyer() && uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['id', 'at'])
+        && request.resource.data.id is string && buyerOrderId(request.resource.data.id)
+        && request.resource.data.at == request.time
+        && (resource == null || request.time >= resource.data.at + duration.value(30, 's'))
+        && !exists(/databases/$(database)/documents/nexusOrders/$(request.resource.data.id))
+        && existsAfter(/databases/$(database)/documents/nexusOrders/$(request.resource.data.id));
+    }
     match /nexusOrders/{orderId} {
-      allow read: if nexusOperator();
+      allow get: if (anonymousBuyer() && buyerOrderId(orderId)) || nexusOperator();
+      allow list: if nexusOperator();
+      allow create: if anonymousBuyer() && intakeEnabled() && validBuyerOrder(orderId);
       allow update: if nexusOperator()
         && resource.data.status == 'pending'
         && request.resource.data.decidedBy == request.auth.uid
