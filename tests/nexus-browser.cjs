@@ -138,7 +138,17 @@ const fs=require('node:fs');
   await page.locator('#summaryDialog').waitFor();
   assert.equal(await page.locator('#hero #kmCinema').count(),1);
   assert.equal(await page.locator('#summaryDialog #kmCinema').count(),0);
-  assert.equal(await page.locator('#summaryDialog .checkout-brand').isVisible(),true);
+  assert.equal(await page.locator('#bagBanner .km-cinema').isVisible(),true);
+  assert.deepEqual(await page.evaluate(()=>{
+   const lightfield=selector=>getComputedStyle(document.querySelector(selector+' .km-lightfield'));
+   const bag=lightfield('#bagBanner');
+   return [bag.animationName,bag.animationDuration];
+  }),await page.evaluate(()=>{
+   const main=getComputedStyle(document.querySelector('#kmCinema .km-lightfield'));
+   return [main.animationName,main.animationDuration];
+  }));
+  assert.equal(await page.locator('#bagBanner image').getAttribute('clip-path'),'url(#km-bag-logo-outline)');
+  assert.equal(await page.locator('#summaryTotal').evaluate(el=>parseFloat(getComputedStyle(el).fontSize)<=28),true);
   assert.equal(await page.locator('#summaryDialog .summary-bottom').evaluate(el=>getComputedStyle(el).position),'static');
   const bagRect=await page.locator('#summaryDialog').boundingBox();
   assert.equal(Math.round(bagRect.width),width);
@@ -148,7 +158,7 @@ const fs=require('node:fs');
   assert.notEqual(await page.locator('#dockCartCount').getAttribute('hidden'),null);
   assert.equal(await page.locator('#dockCartStatus').textContent(),'Sacola vazia.');
   assert.equal(await page.locator('#confirmOrder').isVisible(),false);
-  assert.equal(await page.locator('#summaryDialog .checkout-brand').isVisible(),true);
+  assert.equal(await page.locator('#bagBanner .km-cinema').isVisible(),true);
   await page.locator('#undoBagRemoval').click();
   assert.equal(await page.locator('#dockCartCount').textContent(),'1');
   const address=page.locator('#deliveryAddressFields');

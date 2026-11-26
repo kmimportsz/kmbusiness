@@ -432,7 +432,7 @@ header .nav { flex-shrink: 0; }
 .drawer-socials a::after { margin-inline-start: auto; }
 
 @keyframes km-content-enter{from{translate:0 5px}to{translate:0 0}}
-html[data-dock-paused] :is(#kmCinema *, .km-neon-title, .catalog-skeleton i){animation-play-state:paused!important}
+html[data-dock-paused] :is(.km-cinema *, .km-neon-title, .catalog-skeleton i){animation-play-state:paused!important}
 @media (prefers-reduced-motion: no-preference) {
   .km-scroll-reveal:not(:focus-within) { animation: km-content-enter .28s ease-out; }
   #navigationDialog[open] { animation: km-drawer-enter 400ms var(--km-ease) both; }
@@ -464,15 +464,26 @@ html[data-dock-paused] :is(#kmCinema *, .km-neon-title, .catalog-skeleton i){ani
 #summaryDialog{position:fixed;inset:0;margin:0;width:100%;max-width:none;height:100%;height:100dvh;max-height:none;border:0;border-radius:0;box-shadow:none;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scroll-padding-top:calc(62px + env(safe-area-inset-top));padding-inline:env(safe-area-inset-left) env(safe-area-inset-right)}
 .bag-screen-bar{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:12px;background:#080c14;border-bottom:1px solid #263652;padding:calc(8px + env(safe-area-inset-top)) clamp(12px,4vw,36px) 8px}
 .bag-screen-bar h2{font-size:1.15rem;margin:0}.bag-screen-bar button{min-width:44px;min-height:44px}
-.checkout-brand{display:flex;align-items:center;gap:12px;min-height:76px;padding:10px 14px;width:min(calc(100% - 24px),736px);margin:12px auto 0;border:1px solid #355c9d;border-radius:15px;background:radial-gradient(ellipse at 85% 35%,#153a786e,transparent 75%),#0c1424;color:#f5f8ff}
-.checkout-brand img{width:98px;height:51px;object-fit:contain;border-radius:8px}
-.checkout-brand span{font-weight:650;letter-spacing:.01em}
+#bagBanner .km-cinema{margin-inline:0}
+#summaryDialog .order-notes-section,#summaryDialog .summary-bottom{width:min(calc(100% - 24px),736px);margin-inline:auto}
+#summaryDialog .order-notes-section{padding:14px 0 0}
+#summaryDialog #orderNotes{min-height:68px;font-size:16px;padding:10px;line-height:1.4}
+#summaryDialog .summary-bottom{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;margin-top:16px;padding:14px 14px max(14px,env(safe-area-inset-bottom));border-radius:14px}
+#summaryDialog :is(.summary-breakdown,.summary-total-row,.summary-confirm,.summary-assurance,.response-info,.summary-support,.summary-back){width:100%;margin:0}
+#summaryDialog :is(.summary-breakdown-row,.summary-total-row){display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:10px}
+#summaryDialog .summary-breakdown{padding:0 0 8px}
+#summaryDialog .summary-breakdown-row{padding-block:4px}
+#summaryDialog :is(.summary-distance,.notice,.checkout-help):empty{display:none}
+#summaryDialog #summaryTotal{font-size:clamp(22px,6vw,28px);line-height:1.15;white-space:nowrap;text-align:right}
+#summaryDialog .summary-confirm{justify-content:center;min-height:44px;padding:10px 14px;line-height:1.3;text-align:center}
+#summaryDialog .response-info{padding-block:10px 0}
+#summaryDialog .summary-support{gap:8px 16px}
+#summaryDialog .summary-back{min-height:44px;padding:8px}
 #summaryDialog[data-empty] :is(.nexus-steps,.summary-customer,.summary-fulfillment,.order-notes-section,.summary-bottom){display:none}
-#summaryDialog .summary-content,#summaryDialog .summary-customer,#summaryDialog .summary-fulfillment,#summaryDialog .summary-notes,#summaryDialog .summary-bottom,#summaryDialog .nexus-steps{width:min(100%,760px);margin-inline:auto;min-width:0}
-#summaryDialog .summary-bottom{position:static;padding-bottom:max(14px,env(safe-area-inset-bottom));background:#080c14}
+#summaryDialog .summary-content,#summaryDialog .summary-customer,#summaryDialog .summary-fulfillment,#summaryDialog .nexus-steps{width:min(100%,760px);margin-inline:auto;min-width:0}
+#summaryDialog .summary-bottom{position:static;background:#080c14}
 #summaryDialog .nexus-steps button{min-height:44px}
 #summaryDialog .summary-content{overflow-wrap:anywhere}
-@media(max-width:440px){#summaryDialog .summary-bottom{display:flex;flex-wrap:wrap;gap:8px;padding-inline:12px}#summaryDialog .summary-bottom .primary{flex:1 1 auto;min-height:44px}}
 @media(prefers-reduced-motion:no-preference){#summaryDialog{scroll-behavior:smooth}#summaryDialog[open]{animation:km-bag-screen-in 170ms ease-out both}@keyframes km-bag-screen-in{from{opacity:.65;transform:translateY(5px)}to{opacity:1;transform:none}}}
 </style><!-- km-premium-style:end --></head><body><div class="wrap"><header><h1 class="km-catalog-title">Catálogo <span class="km-neon-title">Clientes</span></h1><nav class="nav"><button type="button" class="cart-trigger" id="openCart" aria-label="Abrir sacola"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 7h16l-1.2 13H5.2L4 7Z"/><path d="M8 8V6a4 4 0 0 1 8 0v2"/></svg><span class="cart-label">Minha sacola</span><span class="cart-counter" id="cartCount" hidden>0</span></button><button type="button" class="menu-trigger" id="openNavigation" aria-label="Abrir menu" aria-controls="navigationDialog" aria-expanded="false"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span>Menu</span></button><a href="#" class="contact" id="headerContact">Fale com a loja ↗</a></nav></header><main><section class="hero" id="hero"><!-- km-premium-banner:start --><div class="art km-cinema" id="kmCinema">
   <div class="km-lightfield" aria-hidden="true"></div>
@@ -542,10 +553,7 @@ html[data-dock-paused] :is(#kmCinema *, .km-neon-title, .catalog-skeleton i){ani
 </nav><div id="dockCartStatus" class="dock-visually-hidden" role="status" aria-atomic="true"></div><dialog id="summaryDialog" aria-labelledby="summaryTitle">
 <div class="bag-screen-bar"><h2 id="summaryTitle">Sacola</h2>
 <button class="round-close" type="button" id="closeSummary" aria-label="Fechar sacola">×</button></div>
-<div class="checkout-brand">
-<img src="assets/km-logo.webp" alt="K&amp;M Imports" width="98" height="51">
-<span>Finalizar pedido</span>
-</div>
+<div id="bagBanner"></div>
 <nav class="nexus-steps" aria-label="Etapas do pedido">
  <button type="button" id="nexusBagStep">Sacola</button>
  <button type="button" id="nexusDataStep">Seus dados</button>
@@ -619,6 +627,15 @@ $('send').onclick=async e=>{e.preventDefault();if(openingSummary)return;openingS
  openBagScreen();if(dockRoot)paintDockNavigation();}catch(error){toast('Não foi possível conferir a seleção. Tente novamente.')}finally{openingSummary=false;$('send').removeAttribute('aria-busy')}};
 const bagScreen=$('summaryDialog');
 function openBagScreen(){
+ const bannerSlot=$('bagBanner');
+ if(!bannerSlot.firstElementChild){
+  const banner=$('kmCinema').cloneNode(true);
+  banner.removeAttribute('id');
+  // Keep the two SVG clip paths independent when the bag is open.
+  banner.querySelector('clipPath').id='km-bag-logo-outline';
+  banner.querySelector('image').setAttribute('clip-path','url(#km-bag-logo-outline)');
+  bannerSlot.append(banner);
+ }
  bagScreen.showModal();
  bagScreen.scrollTop=0;
  $('closeSummary').focus({preventScroll:true});
