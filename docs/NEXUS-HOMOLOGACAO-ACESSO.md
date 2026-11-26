@@ -80,3 +80,19 @@ Worker ou bucket R2 separado só é necessário se o armazenamento e o runtime
 da prévia não oferecerem esse isolamento ou se a homologação exigir testar
 um ambiente Cloudflare separado. Preserve as regras vigentes até preparar
 a candidata e mantenha o faturamento desativado.
+
+### Estado da configuração da prévia
+
+O proprietário verificou pelo Cloud Shell que a conta
+`nexus-order-writer@km-business-homologacao.iam.gserviceaccount.com` recebeu
+o papel personalizado `nexusOrderWriter` com somente as duas permissões
+previstas. A configuração salva na prévia restrita aponta para
+`km-business-homologacao`. A versão ativa não foi alterada.
+
+A autenticação real ainda depende do segredo `ORDER_FIRESTORE_WRITER`,
+ausente na inspeção da prévia. Use o painel de segredos do Site para o JSON
+integral da conta de serviço. Ao concluir a homologação, revogue pela IAM
+a chave temporária criada para esta rodada e remova o segredo. A configuração
+pública do app Firebase Web e a confirmação do armazenamento isolado também
+são necessárias para preparar a versão de teste. Até então, não faça pedidos
+de teste na prévia ativa.
