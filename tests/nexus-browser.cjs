@@ -167,6 +167,7 @@ const fs=require('node:fs');
   await page.locator('input[name="deliveryMode"][value="pickup"]').check();
   assert.equal(await address.isVisible(),false);
   await page.locator('#customerName').fill('Pessoa Teste');
+  await page.locator('#customerPhone').fill('(11) 99999-1234');
   await page.locator('#rememberOrderName').check();
   await page.locator('[name=deliveryMode][value=pickup]').check();
   await page.locator('#confirmOrder').click();

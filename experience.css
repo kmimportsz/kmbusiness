@@ -27,3 +27,6 @@ html{background:#050506}body{background:#050506!important;color:#f3f7ff}main,.sh
 .nexus-order-actions{display:flex;flex-wrap:wrap;gap:8px}
 .nexus-order-actions button{min-height:44px}
 .nexus-order-actions [data-nexus-action="confirm"]{background:#235bcb;color:#fff;border-color:#5f93ff}
+
+#nexusForm fieldset{border:0;padding:0;margin:0 0 14px;min-width:0}
+#nexusForm legend{padding:0;margin-bottom:8px}

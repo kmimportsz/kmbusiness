@@ -77,13 +77,14 @@ service cloud.firestore {
     function validBuyerOrder(orderId) {
       let order = request.resource.data;
       let quota = getAfter(/databases/$(database)/documents/nexusOrderQuota/$(request.auth.uid)).data;
-      return order.keys().hasOnly(['key', 'code', 'customer', 'mode', 'address', 'notes', 'itemsJSON',
+      return order.keys().hasOnly(['key', 'code', 'customer', 'customerPhone', 'mode', 'address', 'notes', 'itemsJSON',
           'subtotalCents', 'shippingCents', 'fingerprint', 'status', 'createdAt'])
         && order.key is string && order.key.matches('^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$')
         && orderId == request.auth.uid + '_' + order.key
         && order.code == order.key.replace('-', '').upper()
         && order.fingerprint is string && order.fingerprint.matches('^[a-f0-9]{64}$')
         && order.status == 'pending' && order.createdAt == request.time
+        && order.customerPhone is string && order.customerPhone.matches('^55[1-9][0-9]{9,10}$')
         && shortText(order.customer, 3, 120) && shortText(order.notes, 0, 500)
         && order.subtotalCents is int && order.subtotalCents >= 0 && order.subtotalCents <= 1000000000
         && ((order.mode == 'pickup' && order.address == null && order.shippingCents == 0)

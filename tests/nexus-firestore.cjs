@@ -233,7 +233,7 @@ async function run(){
   const submitBuyer=(client,uid,key,patch={})=>{
    const id=uid+'_'+key,batch=writeBatch(client);
    batch.set(doc(client,'nexusOrders',id),{
-    key,code:key.replaceAll('-','').toUpperCase(),customer:'Cliente teste',mode:'pickup',address:null,notes:'',
+    key,code:key.replaceAll('-','').toUpperCase(),customer:'Cliente teste',customerPhone:'5511999991234',mode:'pickup',address:null,notes:'',
     itemsJSON:JSON.stringify(order.items),subtotalCents:16000,shippingCents:0,fingerprint:'a'.repeat(64),
     status:'pending',createdAt:serverTimestamp(),...patch
    });
@@ -244,7 +244,7 @@ async function run(){
   assert.equal((await getDoc(doc(buyer,'nexusOrders',directId))).exists(),false);
   const {persistOrder}=await import('../catalogo/assets/order-firestore.js');
   const buyerSdk={...require('firebase/firestore'),db:buyer,uid:'BuyerTest'};
-  const directOrder={key:directKey,code:directKey.replaceAll('-','').toUpperCase(),customer:'Cliente teste',
+  const directOrder={key:directKey,code:directKey.replaceAll('-','').toUpperCase(),customer:'Cliente teste',customerPhone:'5511999991234',
    mode:'pickup',address:null,notes:'',items:order.items,subtotalCents:16000,shippingCents:0,fingerprint:'a'.repeat(64)};
   const concurrentBuyer=await Promise.all([persistOrder(buyerSdk,directOrder),persistOrder(buyerSdk,directOrder)]);
   assert.ok(concurrentBuyer.every(receipt=>receipt.code===directOrder.code&&receipt.fingerprint===directOrder.fingerprint));
@@ -256,6 +256,7 @@ async function run(){
   await assertFails(submitBuyer(buyer,'BuyerTest','0e9155ef-30d9-4d65-bb45-26a2b0897575'));
   const otherKey='0e9155ef-30d9-4d65-bb45-26a2b0897576';
   await assertFails(submitBuyer(otherBuyer,'OtherBuyer',otherKey,{status:'confirmed'}));
+  await assertFails(submitBuyer(otherBuyer,'OtherBuyer',otherKey,{customerPhone:''}));
   await assertFails(submitBuyer(otherBuyer,'OtherBuyer',otherKey,{itemsJSON:'x'.repeat(24001)}));
   await assertFails(submitBuyer(otherBuyer,'OtherBuyer',otherKey,{shippingCents:1}));
   await submitBuyer(otherBuyer,'OtherBuyer',otherKey,{itemsJSON:JSON.stringify(Array.from({length:30},(_,i)=>({...order.items[0],id:'item-'+i})))});
@@ -266,6 +267,7 @@ async function run(){
   await Promise.all([decide(directId,true,['camiseta'],0,0),decide(directId,true,['camiseta'],0,0)]);
   assert.equal((await getDoc(doc(secondAdmin,'nexusOrders',directId))).data().status,'confirmed');
   assert.equal((await getDoc(doc(secondAdmin,'sales','pedido-'+directId))).data().price,160);
+  assert.equal((await getDoc(doc(secondAdmin,'sales','pedido-'+directId))).data().phone,'5511999991234');
   assert.equal((await getDoc(doc(secondAdmin,'products','camiseta'))).data().stock,5);
   const rejectedBuyer=buyerContext('RejectedBuyer');
   const rejectedKey='0e9155ef-30d9-4d65-bb45-26a2b0897577';

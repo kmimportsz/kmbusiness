@@ -107,6 +107,7 @@ function orderCard(order){
     '</p><p>'+item.quantity+' un. · '+currency(item.priceCents)+' / un.</p></div><b>'+currency(item.quantity*item.priceCents)+'</b></li>';
   }).join('')+'</ul>'+
   (order.address?'<p>'+esc([order.address.street,order.address.number,order.address.cep,order.address.reference].filter(Boolean).join(' · '))+'</p>':'')+
+  (order.customerPhone?'<p>WhatsApp: +'+esc(order.customerPhone)+'</p>':'')+
   (order.notes?'<p>'+esc(order.notes)+'</p>':'')+
   '<footer class="nexus-order-foot"><strong>'+ (fee===null?'Subtotal ':'Total ')+currency(subtotal+(fee??0))+'</strong>'+
   (order.status==='pending'?'<div class="nexus-order-actions">'+button('cancel',order.id,'Recusar')+
@@ -183,7 +184,7 @@ async function decide(id,accept,productIds=[],fee=0,reviewedShipping=null){
    if(!validMoney(cents(p.cost)))fail('Confira o custo cadastrado no estoque.');
    return {pid:productIds[n],name:[i.brand,i.model,i.size].filter(Boolean).join(' · '),quantity:i.quantity,priceCents:i.priceCents,costCents:cents(p.cost)};
   });
-  const sale={id:saleId,source:'catalog',orderId:id,orderCode:order.code,items,client:order.customer,phone:'',
+  const sale={id:saleId,source:'catalog',orderId:id,orderCode:order.code,items,client:order.customer,phone:order.customerPhone||'',
    note:order.notes,date:today(),createdAt:at,updatedAt:at,revision:1,inst:[],fees:0,saleExpenses:0,discountCents:0,shippingCents:fee,conditions:'',
    events:[event('Pedido confirmado',at)]};
   calculate(sale);
@@ -247,11 +248,7 @@ function editForm(sale){
   '<div id="nexusLines">'+sale.items.map(lineFields).join('')+'</div>'+button('add-line','','Adicionar item')+
   field('discount','Desconto (R$)',sale.discountCents/100,'number','required min="0" step=".01"')+
   field('shipping','Frete (R$)',sale.shippingCents/100,'number','required min="0" step=".01"')+
-  field('conditions','Condições comerciais',sale.conditions,'text','maxlength="300"')+
-  field('method','Forma de pagamento combinada',sale.paymentMethod,'text','maxlength="60"')+
   field('owner','Responsável',sale.owner,'text','maxlength="100"')+
-  field('fees','Taxas (R$)',sale.fees||0,'number','required min="0" step=".01"')+
-  field('expenses','Despesas (R$)',sale.saleExpenses||0,'number','required min="0" step=".01"')+
   field('note','Observações',sale.note,'text','maxlength="500"'),
   data=>writeSale(sale.id,base,async(live,tx)=>{
    const keys=[...data.keys()].filter(k=>/^pid\d+$/.test(k)).map(k=>k.slice(3));
@@ -261,9 +258,8 @@ function editForm(sale){
     priceCents:cents(data.get('price'+n)),costCents:cents(data.get('cost'+n))}));
    const changed={...live,items,client:data.get('name').trim(),phone:data.get('phone').trim(),
     date:data.get('date'),discountCents:cents(data.get('discount')),shippingCents:cents(data.get('shipping')),
-    conditions:data.get('conditions').trim(),note:data.get('note').trim(),
-    paymentMethod:data.get('method').trim(),owner:data.get('owner').trim(),fees:Number(data.get('fees')),saleExpenses:Number(data.get('expenses'))};
-   if((live.source==='catalog'&&!changed.client)||!dateValid(changed.date)||!validMoney(cents(changed.fees))||!validMoney(cents(changed.saleExpenses)))fail('Confira o cliente, a data, as taxas e as despesas.');
+    note:data.get('note').trim(),owner:data.get('owner').trim()};
+   if((live.source==='catalog'&&!changed.client)||!dateValid(changed.date))fail('Confira o cliente e a data.');
    calculate(changed);
    changed.stockAdjustment=updateStock(tx,products,live.items,items);
    return changed;
