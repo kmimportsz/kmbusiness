@@ -206,7 +206,7 @@ const fs=require('node:fs');
   assert.notEqual(await page.locator('#dockCartCount').getAttribute('hidden'),null);
   assert.equal(await page.locator('#dockCartStatus').textContent(),'Sacola vazia.');
   if(label==='mobile'){
-   await page.locator('#continueShopping').click();
+   await page.locator('#closeSummary').click();
    await page.locator('.catalog-discovery details > summary').click();
    await page.locator('#catalogRememberBrowsing').check();
    const search=page.locator('#search');
