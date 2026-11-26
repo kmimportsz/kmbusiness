@@ -61,3 +61,29 @@ O teste OAuth no Cloud Shell e os ensaios do Worker são evidências da
 abordagem anterior. O backup do Firestore e os testes de regressão do
 Business e catálogo continuam pertinentes. A nova entrada anônima tem
 evidências próprias no emulador.
+
+## Prévia hospedada de homologação
+
+A versão privada 3 do Sites, fonte `f82a176a8156cbaf41e887c20cef18be4efdabca`,
+serviu o [Business](https://km-nexus-demonstracao.inventivetoucan16.chatgpt.site/homologacao/)
+e o [catálogo](https://km-nexus-demonstracao.inventivetoucan16.chatgpt.site/homologacao/catalogo/).
+O acesso sem autenticação recebeu HTTP 401. Com a credencial de serviço do
+Site, as duas páginas e o módulo de pedidos corresponderam byte a byte
+à versão preparada. As páginas usam o app Web do Firestore de homologação,
+catálogo fictício e armazenamento local separado da demonstração anterior.
+Cotação de entrega e WhatsApp ficam desativados nessa configuração.
+
+A API real do Firebase Auth retornou HTTP 200 no login anônimo. O Firestore
+hospedado retornou 403 tanto na consulta do ID pertencente ao comprador
+quanto na consulta do estoque. O usuário descartável da segunda verificação
+foi removido; a primeira tentativa de remoção retornou HTTP 400. Nenhum
+documento foi gravado nessa verificação. O teste de criação, cadência e
+aprovação no ambiente hospedado aguarda aplicação das regras candidatas
+e preparação da base por uma conta autorizada a administrar esse projeto.
+
+Para a prova de retirada, use o produto fictício `homologacao-camiseta`.
+No banco de homologação, o estoque de teste correspondente pode ser
+`products/homologacao-camiseta`, com `name: "Camiseta Horizonte"`,
+`catalogId: "homologacao-camiseta"`, `price: 80`, `cost: 30`, `stock: 5`
+e `stockRevision: 1`. Ao aprovar uma unidade, a segunda sessão deve observar
+estoque 4 e uma única venda associada ao pedido.
