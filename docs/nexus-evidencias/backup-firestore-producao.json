@@ -1,0 +1,18 @@
+{
+  "date": "2026-11-26",
+  "source": "Resultados informados pelo proprietário após execução no Cloud Shell",
+  "project": "agenda-vendas-9922a",
+  "database": "(default)",
+  "documents": 137,
+  "status": "aprovado",
+  "dataSHA256": "87aff8d7565190ec7101cef8cfdca17ca0ca671bdf7587e2c588089a1c0b0a70",
+  "dataIntegrityVerified": true,
+  "restored": true,
+  "restoreTarget": "Firestore Emulator isolado",
+  "encryption": "AES-256",
+  "encryptionVerifiedBeforeTransfer": true,
+  "encryptedDownloadToIPhone": "concluído",
+  "encryptedFilePostDownloadSHA256": "pendente",
+  "originalLocation": "Diretório privado do Cloud Shell",
+  "billingEnabled": false
+}

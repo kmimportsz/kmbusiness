@@ -97,14 +97,22 @@ Evidências por ambiente: **C** suíte `catalogo/source`, **R** suíte da raiz, 
 | Sem limite artificial de 60 FPS | I T · inspeção de CSS/SMIL e Web Animations; P medição física a 120 Hz |
 | Memória, bateria e conexões lentas | P medição em aparelho |
 | Lighthouse Performance ≥ 95, Acessibilidade 100, Boas práticas 100 | T V · 98 / 100 / 100 em Lighthouse mobile local. B medição no ambiente definitivo |
-| Perda de dados zero | B backup e conferência em ambiente real |
+| Perda de dados zero | B comparação de dados antes e depois de eventual liberação no ambiente real |
 | Pedidos duplicados zero | T V · C e F nos cenários cobertos; B validação real |
 | Novos custos recorrentes zero | Nenhum serviço pago adicionado no PR; B estimativa de volume e limites da infraestrutura real |
 | Homologação Firestore | B regras reais, projeto e operador de homologação |
 | Homologação Worker | B ambiente isolado com credenciais, catálogo e provedor de frete de homologação |
-| Backup verificável e reversão | B acesso autorizado aos dados e configuração reais |
+| Backup Firestore de produção e restauração isolada | V · 137 documentos, SHA-256 e restauração confirmados pelo proprietário |
+| Cópia criptografada no iPhone | Download concluído · P comparação do SHA-256 do arquivo baixado |
+| Reversão no ambiente real | B homologação da configuração e conferência antes da liberação |
 | Parecer da IA Pessoal | B encaminhamento registrado, parecer independente pendente |
 | Publicação nos endereços originais e conferência pós-publicação | B condicionada aos itens técnicos e ao parecer independente |
+
+## Evidência do backup de produção
+
+O proprietário confirmou a exportação de 137 documentos, a conferência do SHA-256 dos dados, a restauração isolada e o download no iPhone da cópia AES-256. O original permanece privado no Cloud Shell, com faturamento desativado. O SHA-256 do arquivo `.gpg` baixado ainda precisa ser comparado com o hash que o Cloud Shell imprimiu para esse mesmo arquivo criptografado. O hash dos dados restaurados tem outro escopo.
+
+A evidência registra os resultados informados pelo proprietário. O arquivo e a senha permanecem fora do Git. A conferência da cópia no iPhone, a homologação real do Firestore e do Worker, a conciliação dos dados, o parecer independente e o aceite continuam condicionando a liberação. [Registro do backup de produção](nexus-evidencias/backup-firestore-producao.json)
 
 ## Preparação do backup, liberação e reversão
 
@@ -127,3 +135,9 @@ O código executado é o commit `e14b53d09f76c517d9e771b95836a3c63c72c90a`. Nest
 - O [Lighthouse mobile local](nexus-evidencias/lighthouse-homologacao.json) repetiu 98/100/100, com LCP de 2,18 s, na demonstração fictícia.
 - O [registro de backup e restauração](nexus-evidencias/backup-homologacao.json) contém contagens e hashes. A base Firestore sintética de oito documentos foi restaurada em um segundo emulador vazio com SHA-256 idêntico. O ZIP de catálogo de teste foi restaurado em um bucket de teste que serviu catálogo e imagem através do Worker. Também foi feita uma cópia dos 18 produtos públicos e 18 imagens referenciadas do catálogo oficial. Os objetos da cópia e o manifesto foram conferidos no arquivo compactado, e o Worker isolado serviu o conteúdo restaurado. Os arquivos de backup permanecem fora do Git. Essa evidência cobre apenas o recorte público do catálogo oficial e a base Firestore sintética.
 - [Checklist do iPhone físico](NEXUS-CHECKLIST-IPHONE.md) · [Passos para conceder acessos temporários](NEXUS-HOMOLOGACAO-ACESSO.md).
+
+## Regressão após atualizar a candidata com a main
+
+O catálogo independente do PR #4 segue publicado. Na candidata do PR #3, a resolução dos conflitos mantém o checkout integrado e a confirmação de pedido para a homologação. O verificador da candidata exige o endpoint de registro, a interface de confirmação e a igualdade entre a página pública e o arquivo-fonte.
+
+Passaram a suíte da raiz, a suíte do catálogo, o build e a verificação de sintaxe do Worker. No Firestore Emulator local, a rodada com dois administradores testou regras, sincronização, concorrência na entrada de estoque, confirmação e cancelamento de pedidos, repetição segura, recebimentos e preservação do histórico. Os testes usaram dados sintéticos.
