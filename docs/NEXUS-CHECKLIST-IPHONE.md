@@ -18,10 +18,23 @@ Registre **Passou**, **Falhou** ou **Não testado** em cada item. Se falhar, ano
 | 10 | Teste compra rápida e compartilhar sacola e peça. | A compra rápida abre a revisão sem registrar pedido; os links compartilhados abrem a seleção ou a peça correspondente. |
 | 11 | Edite a revisão, teste retirada e entrega com dados fictícios. Teste lembrar nome e apagá-lo. | A revisão conserva os campos editados. O nome é lembrado apenas com opt-in e pode ser apagado. A entrega da prévia é simulada. |
 | 12 | Feche e reabra a sacola, desligue a conexão e ligue novamente. | A seleção já gravada reaparece após retomar a conexão. Em homologação real, testar também falha no envio e a recuperação com a mesma referência; na prévia o envio é simulado localmente. |
-| 13 | Registre um pedido com toque duplo. Copie o número e teste o WhatsApp opcional. | Surge uma confirmação e um único número. A cópia funciona ou apresenta alternativa. O WhatsApp é simulado e não abre automaticamente. |
+| 13 | Registre um pedido com toque duplo após liberar as regras de homologação. | Surge uma confirmação sem código visível. O Business recebe um único pedido. O WhatsApp permanece opcional e está desativado na prévia isolada. |
 | 14 | Abra Business pela própria página. Confirme o pedido, veja Vendas e Cobranças. | O pedido sai dos pendentes, aparece uma venda, o estoque baixa a quantidade correta e nenhuma cobrança é criada. |
 | 15 | Crie outro pedido e cancele. Edite uma venda e cadastre uma cobrança manual. | O cancelado fica no histórico sem criar venda; a edição recalcula valores; cobrança só aparece após ação explícita com valor e datas. |
 | 16 | Ative **Ajustes → Acessibilidade → Movimento → Reduzir Movimento** e repita sacola e checkout. | O contador e a confirmação continuam funcionando sem deslocamento animado. |
 | 17 | Ative VoiceOver e navegue pelos botões, campos e contador. | Os nomes são claros, a mudança de unidades é anunciada, e o foco retorna a um controle utilizável após fechar os detalhes. |
 
 Os resultados destes passos aceitam a experiência em aparelho físico. A homologação em serviço real e a verificação pós-publicação têm registros separados no [checklist de aceite](NEXUS-ACEITE-FINAL.md).
+
+
+## Prévia visual atual
+
+Abra a [sacola do catálogo](https://km-nexus-demonstracao.inventivetoucan16.chatgpt.site/homologacao/catalogo/)
+e a [amostra dos cartões](https://km-nexus-demonstracao.inventivetoucan16.chatgpt.site/homologacao/cartoes/).
+Gire o aparelho e abra o teclado para conferir a área segura, o botão de fechar
+e o botão de confirmação. Feche e reabra a sacola e confira as mesmas unidades.
+Verifique o banner elétrico e repita com movimento reduzido. Nos cartões,
+confira o cliente em destaque, linhas separadas, fotos, preços, modalidade,
+status e os botões de decisão. A amostra visual usa o catálogo de teste e
+os botões ficam desativados. Aprovação e recusa reais são verificadas
+no Business de homologação após a liberação do banco.

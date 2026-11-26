@@ -3,6 +3,19 @@
 'use strict';
 let orderRows=[],orderReadError='',orderReady=false,detachOrders=null;
 let heardOrders=new Set(),sound=null;
+const orderCatalogUrl='https://km-camisetas-catalogo.inventivetoucan16.chatgpt.site/api/catalog';
+let orderCatalogPhotos=new Map(),orderCatalogLoading;
+function refreshOrderPhotos(){
+ if(orderCatalogLoading)return;
+ orderCatalogLoading=Promise.resolve().then(()=>fetch(orderCatalogUrl,{signal:AbortSignal.timeout(10000)})).then(async response=>{
+  if(!response.ok)return;
+  const catalog=await response.json();
+  const origin=new URL(orderCatalogUrl).origin;
+  orderCatalogPhotos=new Map((catalog.products||[]).filter(p=>typeof p.photo==='string'&&/^\/images\/[A-Za-z0-9-]+$/.test(p.photo))
+   .map(p=>[p.id,origin+p.photo]));
+  paintCount();
+ }).catch(()=>{}).finally(()=>{orderCatalogLoading=null});
+}
 const busy=new Set();
 const ordersRef=()=>db.collection('nexusOrders');
 const authenticated=()=>Boolean(db&&cloudOn&&au?.currentUser);
@@ -33,16 +46,14 @@ function paintCount(){
  if(tab==='orders'&&!$('modal').innerHTML){
   const panel=$('nexusOrdersPanel');
   if(panel){
-   const open=[...panel.querySelectorAll('details[open]')].map(el=>el.dataset.orderRow);
    const focus=document.activeElement;
    const focusedRow=focus.closest('[data-order-row]')?.dataset.orderRow;
    const focusedAction=focus.dataset.nexusAction;
    panel.outerHTML=ordersView();
-   const rows=[...$('nexusOrdersPanel').querySelectorAll('details')];
-   rows.forEach(el=>el.open=open.includes(el.dataset.orderRow));
+   const rows=[...$('nexusOrdersPanel').querySelectorAll('[data-order-row]')];
    const row=rows.find(el=>el.dataset.orderRow===focusedRow);
    if(focusedAction==='sound')$('nexusOrdersPanel').querySelector('[data-nexus-action="sound"]')?.focus();
-   else if(row)(row.querySelector('[data-nexus-action="'+(focusedAction||'')+'"]')||row.querySelector('summary'))?.focus();
+   else if(row)(row.querySelector('[data-nexus-action="'+(focusedAction||'')+'"]')||row.querySelector('h2'))?.focus();
   }
  }
 }
@@ -69,6 +80,7 @@ listen=function(){
   orderRows=sn.docs.map(d=>{const row=d.data();return {...row,id:d.id,items:orderItems(row)}}).sort((a,b)=>orderTime(b.createdAt)-orderTime(a.createdAt));
   const unread=orderRows.some(o=>o.status==='pending'&&!heardOrders.has(o.id));
   if((orderReady||previous)&&unread)chime();
+  if(unread||(!orderReady&&orderRows.length))refreshOrderPhotos();
   orderRows.forEach(o=>heardOrders.add(o.id));
   orderReady=true;orderReadError='';paintCount();
  },()=>{
@@ -80,17 +92,32 @@ listen=function(){
   if(tab==='orders')render();
  });
 };
+function orderCard(order){
+ const status={pending:'Pendente',confirmed:'Aceito',cancelled:'Recusado'};
+ const items=order.items.filter(validOrderItem);
+ const subtotal=items.reduce((total,item)=>total+item.quantity*item.priceCents,0);
+ const fee=order.confirmedShippingCents??order.shippingCents;
+ const receipt=order.mode==='pickup'?'Retirada':fee===null?'Entrega · frete a conferir':'Entrega · '+currency(fee);
+ return '<article class="card nexus-order" data-order-row="'+esc(order.id)+'"><header class="nexus-order-head"><div><h2 tabindex="-1">'+
+  esc(order.customer)+'</h2><p>'+esc(receipt)+'</p></div><span class="nexus-order-status">'+esc(status[order.status]||'Em revisão')+'</span></header>'+
+  '<ul class="nexus-order-items">'+items.map(item=>{
+   const photo=orderCatalogPhotos.get(item.id);
+   return '<li>'+(photo?'<img src="'+esc(photo)+'" alt="" loading="lazy" decoding="async">':'')+
+    '<div><strong>'+esc(item.model)+'</strong><p>'+esc([item.brand,item.size].filter(Boolean).join(' · '))+
+    '</p><p>'+item.quantity+' un. · '+currency(item.priceCents)+' / un.</p></div><b>'+currency(item.quantity*item.priceCents)+'</b></li>';
+  }).join('')+'</ul>'+
+  (order.address?'<p>'+esc([order.address.street,order.address.number,order.address.cep,order.address.reference].filter(Boolean).join(' · '))+'</p>':'')+
+  (order.notes?'<p>'+esc(order.notes)+'</p>':'')+
+  '<footer class="nexus-order-foot"><strong>'+ (fee===null?'Subtotal ':'Total ')+currency(subtotal+(fee??0))+'</strong>'+
+  (order.status==='pending'?'<div class="nexus-order-actions">'+button('cancel',order.id,'Recusar')+
+   (items.length&&items.length===order.items.length?button('confirm',order.id,'Aceitar'):'<span>Pedido com itens inválidos.</span>')+'</div>':'')+
+  '</footer></article>';
+}
 function ordersView(){
- const status={pending:'Pendente',confirmed:'Confirmado',cancelled:'Cancelado'};
  return '<section id="nexusOrdersPanel"><h1>Pedidos</h1><p role="status">'+esc(orderReadError||
   (!authenticated()?'Entre para consultar pedidos.':orderReady?pendingCount()+' pedido(s) pendente(s)':'Sincronizando pedidos…'))+'</p>'+
   (authenticated()?'<button type="button" class="g" data-nexus-action="sound">'+(sound?.state==='running'?'Desativar som':'Ativar som')+'</button>':'')+
-  orderRows.map(o=>'<details class="card item" data-order-row="'+esc(o.id)+'"><summary><b>'+esc(o.code)+'</b> · '+esc(o.customer)+' · '+esc(status[o.status]||o.status)+'</summary>'+
-   o.items.filter(validOrderItem).map(i=>'<div class="inst">'+esc(i.quantity+' × '+[i.brand,i.model,i.size].filter(Boolean).join(' · '))+'<b>'+currency(i.quantity*i.priceCents)+'</b></div>').join('')+
-   '<p>Subtotal '+currency(o.items.filter(validOrderItem).reduce((total,i)=>total+i.quantity*i.priceCents,0))+' · '+(o.mode==='pickup'?'Retirada':o.shippingCents===null?'Entrega a conferir':'Entrega '+currency(o.shippingCents))+'</p>'+
-   (o.address?'<p>'+esc([o.address.street,o.address.number,o.address.cep,o.address.reference].filter(Boolean).join(' · '))+'</p>':'')+
-   (o.notes?'<p>'+esc(o.notes)+'</p>':'')+
-   (o.status==='pending'?'<div class="row">'+button('cancel',o.id,'Recusar')+(o.items.length&&o.items.every(validOrderItem)?button('confirm',o.id,'Confirmar'):'<span>Pedido com itens inválidos.</span>')+'</div>':'')+'</details>').join('')+'</section>';
+  orderRows.map(orderCard).join('')+'</section>';
 }
 function button(action,id,label){
  return '<button type="button" class="g" data-nexus-action="'+action+'" data-nexus-id="'+esc(id)+'">'+label+'</button>';

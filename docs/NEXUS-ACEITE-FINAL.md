@@ -63,7 +63,7 @@ Evidências por ambiente: **C** suíte `catalogo/source`, **R** suíte da raiz, 
 | Cliques concorrentes e pedidos duplicados | I T V · C, U e F |
 | Círculo azul, transição verde e check progressivo | I T V · U e vídeo |
 | Mensagem animada “Pedido efetuado com sucesso!” | I T V · U |
-| Código de pedido copiável | I T V · U para clipboard; P fallback em iPhone físico |
+| Referência do pedido restrita ao funcionamento interno | Requisito atualizado. A confirmação e os cartões devem aparecer sem o código. |
 | Voltar ao catálogo | I T V · U |
 | WhatsApp opcional, sem abertura automática | I T V · U |
 | Mensagem com campos preenchidos e valores do servidor | I T V · C e U |
