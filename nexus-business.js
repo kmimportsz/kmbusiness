@@ -222,10 +222,12 @@ function updateStock(tx,products,before,after){
  }
  return movements;
 }
+const saleSubtotal=items=>items.reduce((total,item)=>total+item.quantity*item.priceCents,0);
+const percentageDiscount=(subtotal,percentage)=>Math.round(subtotal*percentage/100);
 function calculate(sale){
  if(!sale.items.length||sale.items.length>30||sale.items.some(i=>!Number.isInteger(i.quantity)||i.quantity<1||i.quantity>99||
   !validMoney(i.priceCents)||!validMoney(i.costCents)||!i.name))fail('Confira os itens, quantidades, preços e custos.');
- const subtotal=sale.items.reduce((n,i)=>n+i.quantity*i.priceCents,0);
+ const subtotal=saleSubtotal(sale.items);
  const total=subtotal-sale.discountCents+sale.shippingCents;
  if(!validMoney(sale.discountCents)||sale.discountCents>subtotal||!validMoney(sale.shippingCents)||!validMoney(total))fail('Confira o valor, o desconto e o frete.');
  sale.name=sale.items.map(i=>i.quantity+' × '+i.name).join(' · ');sale.pid='';
@@ -243,10 +245,13 @@ function lineFields(item={},index=0){
 function editForm(sale){
  const base=sale.revision;
  let next=sale.items.length;
+ const originalSubtotal=saleSubtotal(sale.items);
+ const initialPercentage=originalSubtotal?Number((100*sale.discountCents/originalSubtotal).toFixed(8)):0;
  form('Editar venda',field('name','Cliente',sale.client,'text',(sale.source==='catalog'?'required ':'')+'maxlength="120"')+
   field('phone','WhatsApp',sale.phone,'tel','maxlength="24"')+field('date','Data da venda',sale.date,'date','required')+
   '<div id="nexusLines">'+sale.items.map(lineFields).join('')+'</div>'+button('add-line','','Adicionar item')+
-  field('discount','Desconto (R$)',sale.discountCents/100,'number','required min="0" step=".01"')+
+  field('discount','Desconto (%)',initialPercentage,'number','required min="0" max="100" step="any" inputmode="decimal"')+
+  '<p><output id="nexusDiscountResult" aria-live="polite"></output></p>'+
   field('shipping','Frete (R$)',sale.shippingCents/100,'number','required min="0" step=".01"')+
   field('owner','Responsável',sale.owner,'text','maxlength="100"')+
   field('note','Observações',sale.note,'text','maxlength="500"'),
@@ -257,17 +262,36 @@ function editForm(sale){
    const items=keys.map((n,k)=>({pid:pids[k],name:data.get('item'+n).trim()||products.get(pids[k])?.data.name,quantity:Number(data.get('qty'+n)),
     priceCents:cents(data.get('price'+n)),costCents:cents(data.get('cost'+n))}));
    const changed={...live,items,client:data.get('name').trim(),phone:data.get('phone').trim(),
-    date:data.get('date'),discountCents:cents(data.get('discount')),shippingCents:cents(data.get('shipping')),
+    date:data.get('date'),discountCents:percentageDiscount(saleSubtotal(items),Number(data.get('discount'))),shippingCents:cents(data.get('shipping')),
     note:data.get('note').trim(),owner:data.get('owner').trim()};
    if((live.source==='catalog'&&!changed.client)||!dateValid(changed.date))fail('Confira o cliente e a data.');
    calculate(changed);
    changed.stockAdjustment=updateStock(tx,products,live.items,items);
    return changed;
   },'Venda revisada'));
- $('nexusForm').addEventListener('click',e=>{
-  if(e.target.dataset.nexusAction==='add-line'&&$('nexusLines').children.length<30)$('nexusLines').insertAdjacentHTML('beforeend',lineFields({},next++));
-  if(e.target.dataset.nexusAction==='remove-line')e.target.closest('[data-nexus-line]').remove();
+ const edit=$('nexusForm');
+ function showDiscount(){
+  const data=new FormData(edit);
+  const items=[...$('nexusLines').children].map(line=>({
+   quantity:Number(line.querySelector('[name^="qty"]').value),
+   priceCents:cents(line.querySelector('[name^="price"]').value)
+  }));
+  const subtotal=saleSubtotal(items);
+  const percentage=Number(data.get('discount')),freight=cents(data.get('shipping'));
+  $('nexusDiscountResult').textContent=Number.isFinite(percentage)&&percentage>=0&&percentage<=100&&validMoney(subtotal)&&validMoney(freight)
+   ?'Desconto: '+currency(percentageDiscount(subtotal,percentage))+' · Total: '+currency(subtotal-percentageDiscount(subtotal,percentage)+freight)
+   :'Confira o desconto, os itens e o frete.';
+ }
+ edit.addEventListener('input',e=>{
+  if(e.target.matches('[name="discount"],[name="shipping"],[name^="qty"],[name^="price"]'))showDiscount();
  });
+ edit.addEventListener('click',e=>{
+  if(e.target.dataset.nexusAction==='add-line'&&$('nexusLines').children.length<30)$('nexusLines').insertAdjacentHTML('beforeend',lineFields({},next++));
+  else if(e.target.dataset.nexusAction==='remove-line')e.target.closest('[data-nexus-line]').remove();
+  else return;
+  showDiscount();
+ });
+ showDiscount();
 }
 async function writeSale(id,version,change,label,chargeIndex=null){
  const ref=saleRef(id),at=new Date().toISOString(),audit=event(label,at);
