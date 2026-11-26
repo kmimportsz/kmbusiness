@@ -135,8 +135,11 @@ const fs=require('node:fs');
    }
   }
   await page.locator('#send').click();
-  await page.locator("#summaryBanner #kmCinema").waitFor();
-  assert.equal(await page.locator('#summaryBanner #kmCinema').count(),1);
+  await page.locator('#summaryDialog').waitFor();
+  assert.equal(await page.locator('#hero #kmCinema').count(),1);
+  assert.equal(await page.locator('#summaryDialog #kmCinema').count(),0);
+  assert.equal(await page.locator('#summaryDialog .checkout-brand').isVisible(),true);
+  assert.equal(await page.locator('#summaryDialog .summary-bottom').evaluate(el=>getComputedStyle(el).position),'static');
   const bagRect=await page.locator('#summaryDialog').boundingBox();
   assert.equal(Math.round(bagRect.width),width);
   assert.equal(Math.round(bagRect.height),height);
@@ -144,8 +147,14 @@ const fs=require('node:fs');
   await page.locator('#summaryItems [data-remove]').click();
   assert.notEqual(await page.locator('#dockCartCount').getAttribute('hidden'),null);
   assert.equal(await page.locator('#dockCartStatus').textContent(),'Sacola vazia.');
+  assert.equal(await page.locator('#confirmOrder').isVisible(),false);
   await page.locator('#undoBagRemoval').click();
   assert.equal(await page.locator('#dockCartCount').textContent(),'1');
+  const address=page.locator('#deliveryAddressFields');
+  await page.locator('input[name="deliveryMode"][value="delivery"]').check();
+  assert.equal(await address.isVisible(),true);
+  await page.locator('input[name="deliveryMode"][value="pickup"]').check();
+  assert.equal(await address.isVisible(),false);
   await page.locator('#customerName').fill('Pessoa Teste');
   await page.locator('#rememberOrderName').check();
   await page.locator('[name=deliveryMode][value=pickup]').check();

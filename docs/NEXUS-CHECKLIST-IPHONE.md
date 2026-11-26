@@ -33,7 +33,7 @@ Abra a [sacola do catálogo](https://km-nexus-demonstracao.inventivetoucan16.cha
 e a [amostra dos cartões](https://km-nexus-demonstracao.inventivetoucan16.chatgpt.site/homologacao/cartoes/).
 Gire o aparelho e abra o teclado para conferir a área segura, o botão de fechar
 e o botão de confirmação. Feche e reabra a sacola e confira as mesmas unidades.
-Verifique o banner elétrico e repita com movimento reduzido. Nos cartões,
+Verifique que o banner principal fica no catálogo e que a marca K&M aparece na área “Finalizar pedido”. Alterne entre motoboy e retirada para conferir que o endereço só aparece para entrega. Nos cartões,
 confira o cliente em destaque, linhas separadas, fotos, preços, modalidade,
 status e os botões de decisão. A amostra visual usa o catálogo de teste e
 os botões ficam desativados. Aprovação e recusa reais são verificadas
