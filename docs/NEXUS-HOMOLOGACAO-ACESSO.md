@@ -138,3 +138,24 @@ de workload, e nenhuma delegação IAM adicional foi configurada. O conector Sit
 aceita o valor como segredo, mas não retornou um link para inserção direta pelo
 proprietário. A homologação hospedada aguarda um canal seguro de entrada no
 runtime selecionado. Tokens e chaves não devem passar pelo chat, Git ou logs.
+
+### Próxima janela de homologação
+
+Concentre o acesso e o aceite móvel em uma única janela com o responsável.
+Use um Worker de homologação que o responsável possa administrar no painel
+do provedor e cujo armazenamento de teste esteja identificado. Se a prévia
+Sites continuar sem entrada segura de segredos acessível ao proprietário,
+um Worker de teste no plano gratuito da Cloudflare com painel de segredos é
+uma alternativa, desde que o armazenamento isolado já esteja disponível
+sem habilitar faturamento. Confirme o escopo e a disponibilidade no painel
+antes de provisionar.
+
+A equipe pode preparar a candidata e o roteiro usando a configuração pública
+do app Web de homologação. Na janela de testes, o responsável insere a
+credencial de curta duração diretamente no painel do Worker de teste e
+confere o Safari físico. O token é exclusivo do Firestore de homologação e
+não deve circular entre serviços via Git, logs ou chat. Se não houver
+armazenamento hospedado sem faturamento, o ensaio em workerd local com R2
+emulado continua disponível como verificação parcial. O Firestore hospedado
+já foi exercitado separadamente pelo Cloud Shell. A equivalência entre esse
+ensaio e a homologação hospedada integral não foi demonstrada.
