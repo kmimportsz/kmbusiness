@@ -30,3 +30,53 @@ verificada cobre somente os objetos referenciados pelo catálogo. As configuraç
 e versões do Worker devem ser conferidas pelo titular antes de qualquer mudança.
 
 Identificadores de projetos e URLs privadas podem ser informados nesta conversa. Use o canal de segredos do provedor para qualquer credencial.
+
+## Projeto de homologação criado
+
+O proprietário informou o projeto `km-business-homologacao`, banco `(default)`,
+região `southamerica-east1`, no plano Spark, com regras iniciais restritivas.
+O uso do Site **K&M NEXUS · Prévia privada** foi autorizado. A inspeção confirmou
+que o Site existe com acesso restrito e ainda não contém as variáveis da integração.
+
+### Identidades e limites
+
+- **Worker:** crie a conta de serviço `nexus-order-writer` dentro de
+  `km-business-homologacao`. A identidade resultante é
+  `nexus-order-writer@km-business-homologacao.iam.gserviceaccount.com`.
+  Conceda a ela, somente no projeto de homologação, uma função personalizada
+  com `datastore.entities.get` e `datastore.entities.create`. A implementação
+  consulta o pedido por ID e cria o documento; a sessão dos operadores faz
+  as atualizações. A credencial IAM do Worker opera fora das regras de
+  cliente do Firestore, por isso a separação do projeto é obrigatória.
+- **Publicador das regras:** use a própria conta Google que opera o Firebase
+  Console, com as permissões que ela já possui. Para delegar a edição no
+  projeto de homologação, o papel predefinido dedicado é
+  `roles/firebaserules.admin`. Não conceda esse papel ao Worker.
+- **Dois operadores:** use contas do Firebase Authentication de homologação.
+  Elas não precisam de papéis IAM. Cadastre os UIDs de homologação como
+  `nexusOperators/{uid}` com `active: true` e use seus e-mails nos marcadores
+  privados da candidata. A conta humana que prepara a base usa o console
+  desse projeto. As contas de teste não podem criar o próprio vínculo.
+- **Sites:** configure `ORDER_FIRESTORE_PROJECT=km-business-homologacao` e o
+  segredo `ORDER_FIRESTORE_WRITER` na prévia privada, após a confirmação da
+  credencial compatível com o Worker. A candidata atual espera JSON de chave
+  da conta de serviço. Se a política do projeto bloquear a criação de chaves,
+  preserve a política e registre o bloqueio para avaliar outra integração.
+
+### Isolamento antes da primeira sessão hospedada
+
+Cadastre um app Web no Firebase de homologação, obtenha a configuração desse
+app e autorize o domínio da prévia em **Authentication → Configurações →
+Domínios autorizados**. A configuração pública de app Web pode ser usada
+para preparar o cliente de teste. A chave privada da conta de serviço vai
+somente ao painel de segredos da prévia.
+
+A versão de produção do Business contém a configuração Firebase de produção
+e referências ao catálogo oficial. A versão a publicar na prévia precisa
+substituir esses destinos pelo projeto de homologação e pela origem privada.
+Antes de qualquer gravação, valide os destinos no navegador e confirme que
+o binding `BUCKET` resolve para armazenamento exclusivamente de teste. Um
+Worker ou bucket R2 separado só é necessário se o armazenamento e o runtime
+da prévia não oferecerem esse isolamento ou se a homologação exigir testar
+um ambiente Cloudflare separado. Preserve as regras vigentes até preparar
+a candidata e mantenha o faturamento desativado.
