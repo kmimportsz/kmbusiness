@@ -148,6 +148,7 @@ const fs=require('node:fs');
   assert.notEqual(await page.locator('#dockCartCount').getAttribute('hidden'),null);
   assert.equal(await page.locator('#dockCartStatus').textContent(),'Sacola vazia.');
   assert.equal(await page.locator('#confirmOrder').isVisible(),false);
+  assert.equal(await page.locator('#summaryDialog .checkout-brand').isVisible(),true);
   await page.locator('#undoBagRemoval').click();
   assert.equal(await page.locator('#dockCartCount').textContent(),'1');
   const address=page.locator('#deliveryAddressFields');

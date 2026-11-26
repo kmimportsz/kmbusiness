@@ -464,7 +464,7 @@ html[data-dock-paused] :is(#kmCinema *, .km-neon-title, .catalog-skeleton i){ani
 #summaryDialog{position:fixed;inset:0;margin:0;width:100%;max-width:none;height:100%;height:100dvh;max-height:none;border:0;border-radius:0;box-shadow:none;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scroll-padding-top:calc(62px + env(safe-area-inset-top));padding-inline:env(safe-area-inset-left) env(safe-area-inset-right)}
 .bag-screen-bar{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:12px;background:#080c14;border-bottom:1px solid #263652;padding:calc(8px + env(safe-area-inset-top)) clamp(12px,4vw,36px) 8px}
 .bag-screen-bar h2{font-size:1.15rem;margin:0}.bag-screen-bar button{min-width:44px;min-height:44px}
-.checkout-brand{display:flex;align-items:center;gap:12px;min-height:76px;padding:10px 14px;margin:0 0 18px;border:1px solid #355c9d;border-radius:15px;background:radial-gradient(ellipse at 85% 35%,#153a786e,transparent 75%),#0c1424;color:#f5f8ff}
+.checkout-brand{display:flex;align-items:center;gap:12px;min-height:76px;padding:10px 14px;width:min(calc(100% - 24px),736px);margin:12px auto 0;border:1px solid #355c9d;border-radius:15px;background:radial-gradient(ellipse at 85% 35%,#153a786e,transparent 75%),#0c1424;color:#f5f8ff}
 .checkout-brand img{width:98px;height:51px;object-fit:contain;border-radius:8px}
 .checkout-brand span{font-weight:650;letter-spacing:.01em}
 #summaryDialog[data-empty] :is(.nexus-steps,.summary-customer,.summary-fulfillment,.order-notes-section,.summary-bottom){display:none}
@@ -542,6 +542,10 @@ html[data-dock-paused] :is(#kmCinema *, .km-neon-title, .catalog-skeleton i){ani
 </nav><div id="dockCartStatus" class="dock-visually-hidden" role="status" aria-atomic="true"></div><dialog id="summaryDialog" aria-labelledby="summaryTitle">
 <div class="bag-screen-bar"><h2 id="summaryTitle">Sacola</h2>
 <button class="round-close" type="button" id="closeSummary" aria-label="Fechar sacola">×</button></div>
+<div class="checkout-brand">
+<img src="assets/km-logo.webp" alt="K&amp;M Imports" width="98" height="51">
+<span>Finalizar pedido</span>
+</div>
 <nav class="nexus-steps" aria-label="Etapas do pedido">
  <button type="button" id="nexusBagStep">Sacola</button>
  <button type="button" id="nexusDataStep">Seus dados</button>
@@ -551,10 +555,7 @@ html[data-dock-paused] :is(#kmCinema *, .km-neon-title, .catalog-skeleton i){ani
  <button type="button" class="secondary" id="undoBagRemoval" hidden>Desfazer remoção</button>
  <button type="button" class="secondary" id="shareBag">Compartilhar sacola</button>
  <span id="bagFeedback" role="status"></span>
-</div></div><section class="summary-customer" aria-labelledby="customerTitle"><div class="checkout-brand">
-<img src="assets/km-logo.webp" alt="K&amp;M Imports" width="98" height="51">
-<span>Finalizar pedido</span>
-</div><h3 class="fulfillment-title" id="customerTitle">Seus dados</h3><div class="customer-fields"><label>Nome e sobrenome
+</div></div><section class="summary-customer" aria-labelledby="customerTitle"><h3 class="fulfillment-title" id="customerTitle">Seus dados</h3><div class="customer-fields"><label>Nome e sobrenome
 <input id="customerName" type="text" autocomplete="name" maxlength="100" placeholder="Como podemos chamar você?" required>
 <div class="nexus-options">
  <label><input id="rememberOrderName" type="checkbox"> Lembrar meu nome neste aparelho</label>
