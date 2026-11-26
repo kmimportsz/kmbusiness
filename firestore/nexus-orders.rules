@@ -4,6 +4,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
     function legacyAdministrator() {
       return request.auth != null
+        && request.auth.token.email_verified == true
         && request.auth.token.get('email', '') in ['__ADMIN_EMAIL_1__', '__ADMIN_EMAIL_2__'];
     }
     match /{rootCollection}/{document=**} {

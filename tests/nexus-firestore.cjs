@@ -16,9 +16,9 @@ async function run(){
  const page=new JSDOM('<button data-nexus-count></button><div id="modal"></div>',{runScripts:'outside-only'});
  try{
   await environment.clearFirestore();
-  const store=environment.authenticatedContext('operator',{email:emails[0]}).firestore();
-  const secondAdmin=environment.authenticatedContext('second-admin',{email:emails[1]}).firestore();
-  const legacyOnly=environment.authenticatedContext('legacy-only',{email:emails[1]}).firestore();
+  const store=environment.authenticatedContext('operator',{email:emails[0],email_verified:true}).firestore();
+  const secondAdmin=environment.authenticatedContext('second-admin',{email:emails[1],email_verified:true}).firestore();
+  const legacyOnly=environment.authenticatedContext('legacy-only',{email:emails[1],email_verified:true}).firestore();
   const ref=(table,id)=>doc(store,table,id);
   const order={status:'pending',code:'A'.repeat(32),customer:'Pessoa Teste',createdAt:'2026-11-25T12:00:00.000Z',
    items:[{id:'camiseta',brand:'Marca Teste',model:'Camiseta A',size:'M',quantity:2,priceCents:8000}],notes:'',
@@ -46,8 +46,14 @@ async function run(){
   await assertFails(getDoc(doc(nonOperator,'nexusOrders','first')));
   await assertFails(setDoc(doc(nonOperator,'nexusOperators','other'),{active:true}));
   await assertFails(setDoc(ref('nexusOrders','untrusted'),order));
-  const unlisted=environment.authenticatedContext('unlisted',{email:'unlisted@example.invalid'}).firestore();
+  const unlisted=environment.authenticatedContext('unlisted',{email:'unlisted@example.invalid',email_verified:true}).firestore();
   await assertFails(getDoc(doc(unlisted,'nexusOrders','first')));
+  for (const claims of [{email:emails[0],email_verified:false},{email:emails[0]}]) {
+   const unverified=environment.authenticatedContext('operator',claims).firestore();
+   await assertFails(getDoc(doc(unverified,'nexusOrders','first')));
+   await assertFails(getDoc(doc(unverified,'products','camiseta')));
+   await assertFails(setDoc(doc(unverified,'config','unverified'),{value:true}));
+  }
   await assertFails(getDoc(doc(unlisted,'products','camiseta')));
   await assertFails(getDoc(doc(legacyOnly,'nexusOrders','first')));
   assert.equal((await getDocs(collection(legacyOnly,'sales'))).size,1);
