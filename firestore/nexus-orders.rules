@@ -94,13 +94,18 @@ service cloud.firestore {
         && quota.id == orderId && quota.at == request.time;
     }
     match /nexusOrderQuota/{uid} {
-      allow create, update: if anonymousBuyer() && uid == request.auth.uid
-        && request.resource.data.keys().hasOnly(['id', 'at'])
-        && request.resource.data.id is string && buyerOrderId(request.resource.data.id)
-        && request.resource.data.at == request.time
-        && (resource == null || request.time >= resource.data.at + duration.value(30, 's'))
-        && !exists(/databases/$(database)/documents/nexusOrders/$(request.resource.data.id))
-        && existsAfter(/databases/$(database)/documents/nexusOrders/$(request.resource.data.id));
+      function validQuotaWrite() {
+        let quota = request.resource.data;
+        return anonymousBuyer() && uid == request.auth.uid
+          && quota.keys().hasOnly(['id', 'at'])
+          && quota.id is string && buyerOrderId(quota.id)
+          && quota.at == request.time
+          && !exists(/databases/$(database)/documents/nexusOrders/$(quota.id))
+          && existsAfter(/databases/$(database)/documents/nexusOrders/$(quota.id));
+      }
+      allow create: if validQuotaWrite();
+      allow update: if request.time >= resource.data.at + duration.value(30, 's')
+        && validQuotaWrite();
     }
     match /nexusOrders/{orderId} {
       allow get: if (anonymousBuyer() && buyerOrderId(orderId)) || nexusOperator();

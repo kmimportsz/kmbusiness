@@ -101,10 +101,8 @@ O pedido gravado é mantido no ambiente de testes para essa próxima etapa.
 A execução hospedada mais recente comprovou o login e o isolamento da
 leitura, mas a gravação do pedido válido retornou `403`. A chamada REST
 e o SDK apresentaram o mesmo resultado. O lote equivalente passou
-no emulador com as regras candidatas. Para identificar a divergência
-exata, confira a revisão de regras ativa no console de homologação com
-uma sessão Google autorizada. A publicação oficial aguarda a validação
-hospedada.
+no emulador com as regras candidatas. A publicação oficial aguarda a
+validação hospedada.
 
 ### Comparação das regras informadas pelo proprietário
 
@@ -119,5 +117,19 @@ O teste REST hospedado repetiu login anônimo HTTP 200, consulta de ID
 próprio inexistente HTTP 404 e negação de leitura de estoque e pedidos
 de terceiros HTTP 403. O commit de um pedido válido continuou respondendo
 HTTP 403. A divergência entre emulador e serviço hospedado não foi
-atribuída a uma condição específica. O texto copiado não confirma por
-si só o vínculo entre a revisão publicada e o banco da requisição.
+atribuída a uma condição específica.
+
+O proprietário confirmou que o texto enviado corresponde à revisão
+publicada. O diagnóstico seguinte verificou a audiência, o emissor,
+o vínculo entre o UID e o token, o provedor anônimo e o formato do UID.
+Todos corresponderam ao projeto de homologação e às regras. O commit
+retornou `PERMISSION_DENIED`, com a mensagem genérica `Missing or
+insufficient permissions` e sem detalhes da condição que falhou. A conta
+temporária foi removida e o lote foi rejeitado integralmente.
+
+Para isolar a expressão, a API de testes do Firebase Rules permite avaliar
+o código hospedado com `expressionReportLevel: FULL` e valores simulados
+para as consultas feitas pelas regras. O resultado precisa ser confrontado
+com o teste de commit real, pois os valores simulados não refletem por si
+só o estado após a gravação atômica. A API requer uma identidade Google
+autorizada, com `firebaserules.rulesets.test` no projeto de homologação.

@@ -248,6 +248,7 @@ async function run(){
   };
   const directKey='0e9155ef-30d9-4d65-bb45-26a2b0897574',directId='BuyerTest_'+directKey;
   assert.equal((await getDoc(doc(buyer,'nexusOrders',directId))).exists(),false);
+  await assertFails(setDoc(doc(buyer,'nexusOrderQuota','BuyerTest'),{id:directId,at:serverTimestamp()}));
   const {persistOrder}=await import('../catalogo/assets/order-firestore.js');
   const buyerSdk={...require('firebase/firestore'),db:buyer,uid:'BuyerTest'};
   const directOrder={key:directKey,code:directKey.replaceAll('-','').toUpperCase(),customer:'Cliente teste',customerPhone:'5511999991234',
@@ -261,6 +262,11 @@ async function run(){
   await assertFails(setDoc(doc(buyer,'nexusOrders',directId),{status:'confirmed'},{merge:true}));
   await assertFails(submitBuyer(buyer,'BuyerTest','0e9155ef-30d9-4d65-bb45-26a2b0897575'));
   const otherKey='0e9155ef-30d9-4d65-bb45-26a2b0897576';
+  await environment.withSecurityRulesDisabled(async context=>{
+   await setDoc(doc(context.firestore(),'nexusOrderQuota','OtherBuyer'),{
+    id:'OtherBuyer_'+directKey,at:new Date(Date.now()-60000)
+   });
+  });
   await assertFails(submitBuyer(otherBuyer,'OtherBuyer',otherKey,{status:'confirmed'}));
   await assertFails(submitBuyer(otherBuyer,'OtherBuyer',otherKey,{customerPhone:''}));
   await assertFails(submitBuyer(otherBuyer,'OtherBuyer',otherKey,{itemsJSON:'x'.repeat(24001)}));
