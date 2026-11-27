@@ -14,3 +14,19 @@ vm.runInContext("sharedProductHandled=false;location.search='?modelo=two';render
 vm.runInContext("api=async()=>{throw Error('offline')}",ctx);await vm.runInContext('retryCustomerCatalog()',ctx);assert.equal(vm.runInContext("quantities.get('one')",ctx),2);
 vm.runInContext("checkoutGuidance('Confira seu endereço.','deliveryStreet')",ctx);assert.equal(el('checkoutHelp').textContent,'Confira seu endereço.');assert.ok(!html.includes('id="sizeFilter"'));assert.ok(!html.includes('data-menu-info="evaluation"'));
 console.log('Customer UX verified: filters, global price sorting, range validation/reset, menu, photo details, specific-model links/share fallbacks, bag synchronization, deep links, help and offline choice preservation.');
+if(process.argv[2]){
+ const unsorted=[
+  {id:'beta',brand:'A',model:'Beta 90'},
+  {id:'alpha2',brand:'Z',model:'Álpha 2'},
+  {id:'alpha10',brand:'A',model:'Alpha 10'},
+  {id:'alpha9',brand:'Z',model:'Alpha 9'},
+  {id:'alpha100x2',brand:'Y',model:'Alpha 100 X2'},
+  {id:'alpha100x10',brand:'Z',model:'Alpha 100 X10'}
+ ].map(p=>({...p,size:'M',price:100,photo:'/images/one'}));
+ ctx.sortFixture=unsorted;
+ vm.runInContext("location.search='';data={products:sortFixture,phone:'5511999999999'};catalogFilters={availableOnly:false,min:null,max:null,sort:'curated'};filter='Todos';activeTab='all';quickSize='';catalogView='all';$('search').value='';render()",ctx);
+ const displayed=[...el('grid').innerHTML.matchAll(/data-product="([^"]+)"/g)].map(m=>m[1]);
+ assert.deepEqual(displayed,['alpha100x10','alpha100x2','alpha10','alpha9','alpha2','beta']);
+ assert.deepEqual(unsorted.map(p=>p.id),['beta','alpha2','alpha10','alpha9','alpha100x2','alpha100x10']);
+ console.log('Model order verified in the public grid: accents, descending numeric groups, independent brands and unchanged source data.');
+}
