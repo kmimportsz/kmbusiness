@@ -54,7 +54,7 @@ continua disponível como reversão do catálogo.
 4. Na reversão, desative a flag para bloquear novas entradas, inclusive
    clientes em cache. Mantenha o Business e as regras que permitem tratar
    pedidos já registrados. Se necessário, restaure apenas o catálogo publicado
-   do PR #4, retomando o fluxo de WhatsApp. A reversão não importa o backup
+   do PR #5 (`3d7a17c`), retomando o fluxo de WhatsApp. A reversão não importa o backup
    nem apaga pedidos, estoque, vendas ou recebimentos.
 
 O teste OAuth no Cloud Shell e os ensaios do Worker são evidências da
@@ -133,3 +133,42 @@ para as consultas feitas pelas regras. O resultado precisa ser confrontado
 com o teste de commit real, pois os valores simulados não refletem por si
 só o estado após a gravação atômica. A API requer uma identidade Google
 autorizada, com `firebaserules.rulesets.test` no projeto de homologação.
+
+### Causa do 403 em homologação
+
+Em 27/11/2026, as 13 sondas somente de leitura confirmaram o banco
+`(default)` de `km-business-homologacao`. Os testes de existência
+do caminho canônico `nexusOrderControl/intake`, tanto dinâmico quanto
+literal, foram negados. A sonda que usa `exists()` para oito variantes
+de `intake` com espaço ou caractere invisível no início ou no fim
+passou. O teste equivalente sobre o nome da coleção foi negado.
+A sonda de variantes de documento informa a existência de ao menos
+uma variante, sem identificar qual delas.
+
+A correção é criar o documento canônico `intake` dentro da coleção
+`nexusOrderControl`, com o campo `enabled` do tipo booleano e valor
+`true`. Preserve o documento antigo e as regras de autorização.
+Depois da correção, o teste de checkout hospedado deve ser executado
+antes de considerar a integração aprovada. As sondas não gravaram
+documentos e a remoção da conta descartável retornou HTTP 200.
+
+Após cadastrar o caminho canônico, o checkout hospedado passou: login
+anônimo e gravação válida HTTP 200, recusas HTTP 403 para telefone
+inválido, duplicidade, cadência, estoque e pedidos de terceiros. A
+conta de teste foi removida. O pedido sintético permanece pendente
+para a verificação com operador, que deve observar uma única venda,
+seu WhatsApp e a redução de estoque em uma unidade na segunda sessão.
+
+### Aceite funcional e condição de publicação
+
+O reteste hospedado após a remoção das regras temporárias aprovou o
+checkout e repetiu as recusas esperadas. Em 27/11/2026, o proprietário
+confirmou a aprovação do pedido no Business de homologação, uma única
+venda com WhatsApp, a baixa de estoque e a sincronização entre sessões.
+
+O módulo do Catálogo no PR aponta para `agenda-vendas-9922a`. Antes
+do merge, é necessário verificar nesse projeto a revisão ativa, o
+provedor anônimo, os operadores e o controle de entrada. A primeira
+ativação deve ocorrer apenas com as regras e o Business compatíveis e
+a opção de reversão disponível. Enquanto essa configuração não for
+verificada, mantenha o catálogo do PR #5 em produção.
