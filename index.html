@@ -193,6 +193,9 @@ const fmt=s=>s.split("-").reverse().slice(0,2).join("/");
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const addDate=(s,i,mode)=>{const d=new Date(s+"T12:00:00");if(mode==="w")d.setDate(d.getDate()+7*i);else if(mode==="q")d.setDate(d.getDate()+15*i);else{const dd=d.getDate();d.setMonth(d.getMonth()+i);if(d.getDate()!==dd)d.setDate(0)}return iso(d)};
 const paid=s=>s.inst.filter(i=>i.paid).reduce((a,i)=>a+i.v,0);
+const saleSettled=s=>window.kmNexus?.managed(s)
+  ? paid(s)>0&&Math.round(paid(s)*100)>=Math.round(s.price*100)
+  : (s.inst||[]).length>0&&s.inst.every(i=>i.paid);
 const status=i=>i.paid?"ok":i.d<today()?"bad":i.d===today()?"warn":"";
 
 function stats(){
@@ -203,14 +206,14 @@ function stats(){
 function allInst(){const a=[];S.sales.forEach(s=>s.inst.forEach((i,n)=>a.push({s,i,n})));return a}
 
 function render(){
-  $("nav").innerHTML=`<div class="topline"><div class="brandmark"><b>K&M BUSINESS</b><small>${({home:"PAINEL",cobr:"COBRANÇAS",sales:"VENDAS",prod:"ESTOQUE",more:"FERRAMENTAS",ops:"OPERAÇÕES",command:"INTELIGÊNCIA",calendar:"AGENDA",receipts:"RECIBOS",insights:"INDICADORES",km:"FINANCEIRO"})[tab]||"GESTÃO"}</small></div><button class="menu-open" aria-label="Abrir menu" aria-expanded="false" onclick="toggleMenu(true)">☰</button></div>`;
-  $("fab").style.display=(tab==="prod"||tab==="more"||["km","insights","calendar","receipts","command","ops","catalog"].includes(tab))?"none":"block";
+  $("nav").innerHTML=`<div class="topline"><div class="brandmark"><b>K&M BUSINESS</b><small>${({home:"PAINEL",cobr:"COBRANÇAS",sales:"VENDAS",orders:"PEDIDOS",prod:"ESTOQUE",more:"FERRAMENTAS",ops:"OPERAÇÕES",command:"INTELIGÊNCIA",calendar:"AGENDA",receipts:"RECIBOS",insights:"INDICADORES",km:"FINANCEIRO"})[tab]||"GESTÃO"}</small></div><button class="menu-open" aria-label="Abrir menu" aria-expanded="false" onclick="toggleMenu(true)">☰</button></div>`;
+  $("fab").style.display=(tab==="prod"||tab==="more"||["km","insights","calendar","receipts","command","ops","catalog","orders"].includes(tab))?"none":"block";
   if(tryClose())save();
-  $("app").innerHTML={home,cobr,sales,prod,more,km,insights,calendarFinance,receipts,command:kmCommand,ops:operationCenter,catalog:publicCatalogPanel}[tab]();
+  $("app").innerHTML={home,cobr,sales,prod,more,km,insights,calendarFinance,receipts,command:kmCommand,ops:operationCenter,catalog:publicCatalogPanel,orders:()=>window.kmNexus.ordersView()}[tab]();
 }
 const go=t=>{toggleMenu(false);tab=t;render();scrollTo(0,0)};
 function toggleMenu(open){const layer=$("menuOverlay"),drawer=$("menuDrawer");if(!layer||!drawer)return;layer.classList.toggle("open",!!open);document.body.style.overflow=open?"hidden":"";if(!open)return;
-const items=[["home","◈","Início"],["sales","▤","Vendas"],["cobr","◷","Cobranças"],["prod","▣","Estoque"],["catalog","▦","Catálogo"],["ops","⚡","Central de operações"],["command","◆","Visão estratégica"],["insights","▥","Indicadores por período"],["calendar","▦","Calendário financeiro"],["receipts","🧾","Recibos"],["km","📊","Inteligência financeira"],["more","⚙","Mais / Configurações"]];
+const items=[["home","◈","Início"],["sales","▤","Vendas"],["orders","▦","Pedidos"],["cobr","◷","Cobranças"],["prod","▣","Estoque"],["catalog","▦","Catálogo"],["ops","⚡","Central de operações"],["command","◆","Visão estratégica"],["insights","▥","Indicadores por período"],["calendar","▦","Calendário financeiro"],["receipts","🧾","Recibos"],["km","📊","Inteligência financeira"],["more","⚙","Mais / Configurações"]];
 drawer.innerHTML=`<div class="drawer-title"><div><b>K&M IMPORTS</b><div class="sub">Seu espaço de trabalho</div></div><button class="g" onclick="toggleMenu(false)" aria-label="Fechar menu">✕</button></div>`+items.map(([k,ic,txt])=>`<button class="drawer-link ${tab===k?"on":""}" onclick="go('${k}')"><span>${ic}</span>${txt}</button>`).join("");}
 document.addEventListener("keydown",e=>{if(e.key==="Escape")toggleMenu(false)});
 
@@ -288,9 +291,10 @@ const thumb=s=>s.img?`<img class="thumb" src="${s.img}" alt="">`:`<div class="th
 
 function cobr(){
   const f=filter,list=allInst().filter(x=>f==="paid"?x.i.paid:f==="late"?(!x.i.paid&&x.i.d<today()):!x.i.paid).sort((a,b)=>a.i.d.localeCompare(b.i.d));
-  return`<h1>Cobranças</h1><div class="row" style="margin-bottom:10px">
+  const commercial=(S.sales||[]).filter(s=>window.kmNexus?.managed(s));
+  return`<h1>Cobranças</h1>${commercial.length?`<details class="card"><summary>Cadastrar cobrança manual</summary>${commercial.map(s=>`<div class="inst"><span>${esc(s.client||"Sem nome")} · ${esc(s.orderCode||s.name)}</span>${window.kmNexus.button('charge',s.id,'Cadastrar cobrança')}</div>`).join('')}</details>`:''}<div class="row" style="margin-bottom:10px">
   ${[["","A receber"],["late","Atrasadas"],["paid","Pagas"]].map(([k,t])=>`<button class="${f===k?"":"g"}" onclick="filter='${k}';render()">${t}</button>`).join("")}</div>
-  ${list.length?list.map(instRow).join(""):`<div class="empty">Nada por aqui</div>`}`;
+  ${list.length?list.map(x=>instRow(x)+(window.kmNexus?.managed(x.s)&&!x.i.paid?`<button type="button" class="g" data-nexus-action="charge" data-nexus-id="${esc(x.s.id)}" data-nexus-index="${x.n}">Editar cobrança</button>`: '')).join(""):`<div class="empty">Nada por aqui</div>`}`;
 }
 let tmpProof="";
 const getProof=(id,n)=>((S.proofs.find(x=>x.id===id+"_"+n))||{}).img||"";
@@ -310,7 +314,7 @@ function sales(){
   const list=[...S.sales].filter(s=>{
     if(window.b3SelectedOwner&&s.owner!==window.b3SelectedOwner)return false;
     const searchable=norm([s.client,s.name,s.phone,s.price,s.cost,s.note,s.date].join(" "));
-    const done=Array.isArray(s.inst)&&s.inst.length>0&&s.inst.every(i=>i.paid);
+    const done=saleSettled(s);
     const partial=!done&&(s.inst||[]).some(i=>i.paid);
     return (!q||searchable.includes(q))&&(!saleDateFilter||s.date===saleDateFilter)&&(!kmDateFrom||s.date>=kmDateFrom)&&(!kmDateTo||s.date<=kmDateTo)&&(!kmMinPrice||+s.price>=+kmMinPrice)&&(!kmMaxPrice||+s.price<=+kmMaxPrice)&&
       (saleFilter==="all"||(saleFilter==="done"&&done)||(saleFilter==="open"&&!done)||(saleFilter==="partial"&&partial));
@@ -320,23 +324,23 @@ function sales(){
   const dates=[...groups.keys()].sort((a,b)=>b.localeCompare(a));
   const row=s=>{
     const p=paid(s),pct=s.price?Math.min(100,p/s.price*100):0;
-    const done=Array.isArray(s.inst)&&s.inst.length>0&&s.inst.every(i=>i.paid);
+    const done=saleSettled(s);
     return`<details class="card item ${done?"sale-closed":""}"><summary style="list-style:none;cursor:pointer"><div class="row">${thumb(s)}<div class="grow"><div class="row" style="justify-content:space-between;align-items:flex-start;gap:5px"><b>${esc(s.client||"Sem nome")}</b><span class="sale-status ${done?"done":""}">${done?"✓ Pago":p>0?"◷ Parcial":"◷ Pendente"}</span></div>
-    <div class="sub">${esc(s.name)} · ${fmt(s.date)}</div>
+    <div class="sub">${esc(s.name)} · ${fmt(s.date)} · ${s.source==="catalog"?"Catálogo":"Manual"}</div>
     <div class="sub">Venda <b>${money(s.price)}</b> · Lucro ${money(s.price-s.cost)}</div></div></div>
     <div class="bar"><i style="width:${pct}%"></i></div><div class="sub">Recebido ${money(p)} de ${money(s.price)}</div></summary>
-    ${s.inst.map((i,n)=>`<div class="inst"><span>${n+1}ª · ${fmt(i.d)} · ${money(i.v)} <span class="chip ${status(i)}">${i.paid?"pago":status(i)==="bad"?"atrasada":"aberta"}</span></span><span class="row" style="gap:6px">${i.paid?`<button class="g" onclick="proofForm('${s.id}',${n})">${getProof(s.id,n)?"🧾":"＋🧾"}</button>`:""}<button class="${i.paid?"g":""}" onclick="pay('${s.id}',${n})">${i.paid?"Desfazer":"Pago"}</button></span></div>`).join("")}
+    ${s.inst.map((i,n)=>`<div class="inst"><span>${n+1}ª · ${fmt(i.d)} · ${money(i.v)} <span class="chip ${status(i)}">${i.paid?"pago":status(i)==="bad"?"atrasada":"aberta"}</span></span><span class="row" style="gap:6px">${i.paid?`<button class="g" onclick="proofForm('${s.id}',${n})">${getProof(s.id,n)?"🧾":"＋🧾"}</button>`:""}${i.paid&&window.kmNexus?.managed(s)?'':`<button class="${i.paid?"g":""}" onclick="pay('${s.id}',${n})">${i.paid?"Desfazer":"Pago"}</button>`}</span></div>`).join("")}
     ${s.note?`<div class="sub" style="margin-top:6px">📝 ${esc(s.note)}</div>`:""}
-    <div class="row" style="justify-content:flex-end;flex-wrap:wrap;margin-top:8px"><button onclick="printReceipt('${s.id}')">🧾 Recibo</button><button class="g" onclick="saleForm('${s.id}')">✏️ Editar venda</button><button class="r" onclick="delSale('${s.id}')">Excluir venda</button></div></details>`;
+    ${window.kmNexus?.managed(s)?`<div class="row">${window.kmNexus.button('edit',s.id,'Editar venda')}${window.kmNexus.button('charge',s.id,'Cadastrar cobrança')}<button class="g" onclick="printReceipt('${s.id}')">Recibo</button></div>`:`<div class="row" style="justify-content:flex-end;flex-wrap:wrap;margin-top:8px"><button onclick="printReceipt('${s.id}')">🧾 Recibo</button><button class="g" onclick="saleForm('${s.id}')">✏️ Editar venda</button><button class="r" onclick="delSale('${s.id}')">Excluir venda</button></div>`}</details>`;
   };
   return`<h1>Vendas</h1><input id="salesSearch" placeholder="🔍 Buscar cliente, produto, telefone, valor ou data" value="${esc(filter)}" oninput="filter=this.value;render();const el=$('salesSearch');el.focus();el.setSelectionRange(el.value.length,el.value.length)">
   <div class="toolbar-filters"><select aria-label="Filtrar situação da venda" onchange="saleFilter=this.value;render()"><option value="all" ${saleFilter==="all"?"selected":""}>Todas as situações</option><option value="open" ${saleFilter==="open"?"selected":""}>Pendentes + parciais</option><option value="partial" ${saleFilter==="partial"?"selected":""}>Pagamento parcial</option><option value="done" ${saleFilter==="done"?"selected":""}>Totalmente pagas</option></select>
   <input type="date" aria-label="Filtrar data da venda" value="${saleDateFilter}" onchange="saleDateFilter=this.value;render()"></div>
   <details class="km-report"><summary style="cursor:pointer;font-weight:600">⚙️ Filtros avançados: período e valor</summary><div class="km-selector"><div><label>De</label><input type="date" value="${kmDateFrom}" onchange="kmDateFrom=this.value;render()"></div><div><label>Até</label><input type="date" value="${kmDateTo}" onchange="kmDateTo=this.value;render()"></div><div><label>Valor mínimo</label><input type="number" value="${kmMinPrice}" onchange="kmMinPrice=this.value;render()" placeholder="R$"></div><div><label>Valor máximo</label><input type="number" value="${kmMaxPrice}" onchange="kmMaxPrice=this.value;render()" placeholder="R$"></div></div><button class="g" style="margin-top:9px" onclick="kmDateFrom='';kmDateTo='';kmMinPrice='';kmMaxPrice='';saleDateFilter='';saleFilter='all';render()">Limpar filtros avançados</button></details><div class="mini-meta">${list.length} venda(s) encontrada(s) ${saleDateFilter?` · <a href="#" onclick="saleDateFilter='';render();return false">Limpar data</a>`:""}</div>
   ${dates.length?dates.map(d=>{const day=groups.get(d);day.sort((a,b)=>{
-    const aDone=a.inst?.length&&a.inst.every(i=>i.paid)?1:0,bDone=b.inst?.length&&b.inst.every(i=>i.paid)?1:0;
+    const aDone=saleSettled(a)?1:0,bDone=saleSettled(b)?1:0;
     return aDone-bDone; // Ordem de cadastro mantida dentro dos dois grupos.
-  });const pending=day.filter(s=>!(s.inst?.length&&s.inst.every(i=>i.paid))).length;
+  });const pending=day.filter(s=>!saleSettled(s)).length;
   const dayBilled=sumList(day,s=>s.price),dayPaid=sumList(day,paid),dayProfit=sumList(day,s=>s.price-s.cost);
   const label=d==="Sem data"?d:d.split("-").reverse().join("/");
   return`<div class="day-head"><strong>📅 ${esc(label)}</strong><small>${pending} pendente${pending===1?"":"s"} · ${day.length-pending} pago${day.length-pending===1?"":"s"}</small></div><div class="mini-meta" style="margin:-5px 3px 12px">Vendido <b>${money(dayBilled)}</b> · Recebido das vendas <b class="ok">${money(dayPaid)}</b> · Lucro bruto <b>${money(dayProfit)}</b></div>${day.map(row).join("")}`}).join(""):`<div class="empty">Nenhuma venda ainda. Toque no + para registrar.</div>`}`;
@@ -344,7 +348,7 @@ function sales(){
 // Recibo premium apenas de leitura: não modifica registros ou serviços de nuvem.
 function printReceipt(id){
   const s=S.sales.find(x=>x.id===id);if(!s)return alert("Venda não encontrada.");
-  const received=paid(s),balance=Math.max(0,s.price-received),done=Array.isArray(s.inst)&&s.inst.length>0&&s.inst.every(i=>i.paid);
+  const received=paid(s),balance=Math.max(0,s.price-received),done=saleSettled(s);
   const lines=(s.inst||[]).map((i,n)=>`<tr><td>${String(n+1).padStart(2,"0")}</td><td>${esc(fmt(i.d))}</td><td style="text-align:right">${money(i.v)}</td><td><span class="pill ${i.paid?"settled":""}">${i.paid?"Pago":"Pendente"}</span></td></tr>`).join("");
   const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Recibo • K&M Imports</title><style>
   *{box-sizing:border-box}body{margin:0;background:#080a10;color:#e9eef9;font:14px/1.55 -apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif}.toolbar{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px max(14px,calc((100vw - 730px)/2));background:rgba(7,10,16,.94);border-bottom:1px solid #25344c;backdrop-filter:blur(18px)}button{cursor:pointer;font-size:13px;font-weight:600;border:1px solid #31598e;border-radius:10px;padding:10px 14px;background:#143967;color:white}.close{background:#17202d;border-color:#36445a;font-size:21px;line-height:1;padding:8px 13px}.paper{max-width:690px;margin:25px auto 55px;background:#fff;color:#18202d;box-shadow:0 20px 90px #0008;border-radius:3px;overflow:hidden}.top{background:#080d16;color:white;padding:34px 38px 32px;position:relative}.top:after{content:"";position:absolute;bottom:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#0f2748,#357ac6,#0c2442)}.brand{font-size:30px;font-weight:900;letter-spacing:-1.6px;line-height:1}.brand span{color:#498fe5}.strap{font-size:10px;letter-spacing:3px;color:#9db2ce;text-transform:uppercase;margin-top:11px}.top-row{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}.doc-label{text-align:right;font-size:10px;letter-spacing:1.7px;color:#a5b6ca}.doc-label b{display:block;color:white;font-size:13px;letter-spacing:.7px;margin-top:5px}.body{padding:32px 38px 34px}.eyebrow{color:#476993;letter-spacing:2px;font-size:10px;font-weight:800;text-transform:uppercase}.title{font-weight:800;font-size:22px;letter-spacing:-.6px;margin:6px 0 26px}.headline{display:grid;grid-template-columns:1fr 1fr;gap:24px}.label{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#8290a3}.value{font-size:14px;font-weight:700;overflow-wrap:anywhere;margin-top:3px}.value.small{font-size:12px}.block{margin-top:26px;border-top:1px solid #e5eaf2;padding-top:20px}h2{font-size:11px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#667993;margin:0 0 14px}.line{display:flex;justify-content:space-between;gap:18px;align-items:baseline;margin:10px 0}.line span:first-child{color:#6c788b}.line strong{text-align:right;overflow-wrap:anywhere}.product{background:#f2f5f9;border-left:3px solid #1b528c;border-radius:2px;padding:15px;margin-top:10px}.product strong{font-size:15px}.columns{display:grid;grid-template-columns:1fr 1fr;gap:14px}table{border-collapse:collapse;width:100%;font-size:12px}th{color:#65768d;text-align:left;font-size:10px;letter-spacing:.7px;text-transform:uppercase}th,td{padding:11px 7px;border-bottom:1px solid #e5eaf2}th:first-child,td:first-child{padding-left:0}.pill{display:inline-block;padding:4px 8px;border-radius:20px;color:#9b6b21;background:#fff4e2;font-size:10px;font-weight:800}.pill.settled{color:#28775d;background:#e4f7ee}.totalbox{margin-top:24px;background:#081321;color:white;padding:22px;border-radius:4px}.totalbox .line span:first-child{color:#b0c0d4}.grand{font-size:25px;font-weight:800}.state{font-size:11px;font-weight:800;letter-spacing:1px;color:${done?"#66dbb0":"#f9c775"}}.foot{border-top:1px solid #e8edf4;margin-top:28px;padding-top:15px;font-size:10px;color:#7d8a9c}.obs{font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}.watermark{letter-spacing:2px;font-size:10px;color:#9da9bb;margin-top:8px}@media(max-width:600px){.paper{margin:12px 8px 36px}.top{padding:26px 22px}.body{padding:25px 22px}.brand{font-size:26px}.headline{gap:16px}.columns{grid-template-columns:1fr}table{font-size:11px}th,td{padding:9px 3px}.doc-label{font-size:9px}}@media print{@page{size:A4;margin:12mm}body{background:#fff}.toolbar{display:none}.paper{margin:0;box-shadow:none;max-width:none;border-radius:0;print-color-adjust:exact;-webkit-print-color-adjust:exact}.top{print-color-adjust:exact;-webkit-print-color-adjust:exact}.totalbox{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
@@ -558,7 +562,25 @@ function more(){
 function calc(){const c=+$("cc").value||0,m=+$("cm").value||0,p=c*(1+m/100);$("cr").innerHTML=c?`Venda por <b>${money(p)}</b> → lucro de <b class="ok">${money(p-c)}</b>`:""}
 const theme=t=>document.documentElement.setAttribute("data-theme",t);
 function copyBk(){const j=JSON.stringify(S);try{navigator.clipboard.writeText(j).then(()=>alert("Backup copiado!"),()=>{$("bk").value=j;$("bk").select()})}catch(e){$("bk").value=j;$("bk").select()}}
-function restore(){try{const d=JSON.parse($("bk").value);if(!d.sales||!d.products)throw 0;if(confirm("Substituir os dados atuais?")){if(!d.catalog)d.catalog=S.catalog||[];for(const k of["cphotos","expenses","closings","config","proofs"])if(!d[k])d[k]=S[k]||[];S=d;save();render()}}catch(e){alert("Backup inválido")}}
+async function restore(){
+ try{
+  const d=JSON.parse($("bk").value);
+  if(!Array.isArray(d.sales)||!Array.isArray(d.products))throw Error("Backup inválido.");
+  if(!confirm("Substituir os dados atuais?"))return;
+  if(db&&cloudOn){
+   if(!ready.products)throw Error("Aguarde a sincronização dos produtos.");
+   const next=new Map(d.products.map(p=>[p.id,p]));
+   if(next.size!==d.products.length||d.products.some(p=>!p.id))throw Error("O backup contém produtos sem ID ou repetidos.");
+   const ids=[...new Set([...Object.keys(last.products),...next.keys()])];
+   await commitProductChanges(ids.map(id=>({id,before:JSON.parse(last.products[id]||"null"),after:next.get(id)||null}))
+     .filter(row=>!productEqual(row.before,row.after)));
+   d.products=S.products;
+  }
+  if(!d.catalog)d.catalog=S.catalog||[];
+  for(const k of ["cphotos","expenses","closings","config","proofs"])if(!d[k])d[k]=S[k]||[];
+  S=d;save();render();
+ }catch(error){alert(error.message||"Backup inválido.")}
+}
 
 function modal(html){$("modal").innerHTML=`<div class="modal" onclick="if(event.target===this)closeM()"><div class="sheet">${html}</div></div>`}
 const closeM=()=>$("modal").innerHTML="";
@@ -582,8 +604,9 @@ function renderFl(){const raw=$("pq").value.trim(),q=norm(raw),L=FL.map((f,i)=>[
    +(q&&pModel()&&!FL.some(f=>norm(f)===q)?`<button class="g" style="margin-top:8px" onclick="pAddNew()">+ Adicionar “${esc(raw)}” ao catálogo</button>`:"")}
 function pTog(i,c){const f=FL[i];if(c)pSel[f]=pSel[f]??1;else delete pSel[f];renderFl()}
 function pAddNew(){const m=pModel(),f=$("pq").value.trim();if(!m||!f)return;if(!m.f.some(x=>norm(x)===norm(f)))m.f.push(f);save();FL=pFlavs(pBrand(),m);const nf=FL.find(x=>norm(x)===norm(f))||f;pSel[nf]=1;$("pq").value="";renderFl()}
+let productFormSnapshot,productFormOperation,productFormBusy=false;
 function prodForm(id){
-  const p=id?S.products.find(x=>x.id===id):null;pEdit=id||"";pSel={};pCur=p?p.flavor||"":"";tmpImg=p?p.img||"":"";
+  const p=id?S.products.find(x=>x.id===id):null;pEdit=id||"";productFormSnapshot=p?JSON.parse(JSON.stringify(p)):null;productFormOperation="stock-form-"+uid();pSel={};pCur=p?p.flavor||"":"";tmpImg=p?p.img||"":"";
   modal(`<h1>${p?"Editar":"Novo"} pod</h1>
   <div class="row"><img id="pv" class="thumb" style="width:72px;height:72px" ${tmpImg?`src="${tmpImg}"`:""}><div class="grow"><input type="file" accept="image/*" onchange="readImg(this,d=>{tmpImg=d;pv.src=d})"></div></div>
   <label>Marca</label><select id="pb" onchange="pbChange(1)"><option value="">— Outra (digitar o nome) —</option>${[...CATS()].sort(byName).map(b=>`<option value="${b.id}">${esc(b.name)}</option>`).join("")}</select>
@@ -596,7 +619,8 @@ function prodForm(id){
   const b=p&&p.brand&&CATS().find(x=>x.name===p.brand);if(b)$("pb").value=b.id;
   if($("pb").value)pbChange(0,p&&p.model);else pVis();
 }
-function saveProd(id){
+async function saveProd(id){
+  if(db&&cloudOn)return saveProductCloud(id);
   const cost=+$("pc").value||0,price=+$("pp").value||0,b=pBrand();
   if(b&&!id){
     const m=pModel();if(!m)return alert("Escolha o modelo");const ks=Object.keys(pSel);if(!ks.length)return alert("Marque pelo menos um sabor");
@@ -611,7 +635,14 @@ function saveProd(id){
   if(id)Object.assign(S.products.find(x=>x.id===id),o);else S.products.push({id:uid(),...o});
   save();closeM();render();
 }
-function delProd(id){if(confirm("Excluir pod? As vendas já feitas continuam.")){S.products=S.products.filter(p=>p.id!==id);save();closeM();render()}}
+async function delProd(id){if(confirm("Excluir pod? As vendas já feitas continuam.")){
+  if(db&&cloudOn)return submitProductOperation(async()=>{
+    const expected=productFormSnapshot?.id===id?productFormSnapshot:S.products.find(p=>p.id===id);
+    if(!expected)throw Error("Produto indisponível. Atualize a lista.");
+    await commitProductChanges([{id,before:expected,after:null}]);
+    closeM();render();
+  });
+  S.products=S.products.filter(p=>p.id!==id);save();closeM();render()}}
 
 let editId="";
 const redo=()=>!editId||$("rf").checked;
@@ -675,6 +706,7 @@ function saleDiscountToggle(){const on=$("discEnable").checked;$("discArea").sty
 function saleDiscountCalc(){if(!$("discEnable")?.checked)return;const base=Math.max(0,Number($("discBase").value)||0),percent=Math.min(100,Math.max(0,Number($("discPct").value)||0));const total=Math.round(base*(1-percent/100)*100)/100;$("sv2").value=total;$("discResult").textContent=`Desconto: ${money(base-total)}  •  Valor final: ${money(total)}`;prev()}
 
 function saveSale(){
+  if(db&&cloudOn&&!editId)return alert("Recarregue o Business para registrar a venda com estoque sincronizado.");
   const name=$("sn").value.trim(),price=+$("sv2").value;
   if(!name||!price)return alert("Informe o pod e o valor da venda");
   const pv_=$("sp").value,pid=pv_.startsWith("c:")?"":pv_,inst=curPlan();
@@ -763,7 +795,7 @@ function receipts(){
   return `<div class="section-top"><h1>▤ Histórico de recibos</h1><button class="g" onclick="go('more')">Voltar</button></div>
   <div class="sub">Recibos reemitidos das vendas cadastradas. Nenhuma cópia nova é salva.</div><input id="receiptSearch" style="margin:12px 0" placeholder="Buscar cliente, produto, data ou valor" value="${esc(receiptSearch)}" oninput="receiptSearch=this.value;render();const e=$('receiptSearch');e.focus();e.setSelectionRange(e.value.length,e.value.length)">
   <div class="mini-meta">${list.length} registro(s) disponível(is)</div>
-  ${list.map(s=>{const p=paid(s),done=s.inst?.length&&s.inst.every(i=>i.paid);return `<div class="card item receipt-card"><div class="grow"><b>${esc(s.client||"Sem nome")}</b><div class="sub">${esc(s.name)} · ${dateHuman(s.date)}</div><div class="sub">${money(s.price)} · <span class="${done?"ok":"warn"}">${done?"Quitado":`Recebido ${money(p)}`}</span></div></div><div style="display:grid;gap:5px"><button onclick="printReceipt('${s.id}')">🧾 Abrir</button><button class="g" onclick="kmReceiptShare('${s.id}')">Compartilhar PDF</button></div></div>`}).join("")||`<div class="empty">Nenhum recibo encontrado.</div>`}`;
+  ${list.map(s=>{const p=paid(s),done=saleSettled(s);return `<div class="card item receipt-card"><div class="grow"><b>${esc(s.client||"Sem nome")}</b><div class="sub">${esc(s.name)} · ${dateHuman(s.date)}</div><div class="sub">${money(s.price)} · <span class="${done?"ok":"warn"}">${done?"Quitado":`Recebido ${money(p)}`}</span></div></div><div style="display:grid;gap:5px"><button onclick="printReceipt('${s.id}')">🧾 Abrir</button><button class="g" onclick="kmReceiptShare('${s.id}')">Compartilhar PDF</button></div></div>`}).join("")||`<div class="empty">Nenhum recibo encontrado.</div>`}`;
 }
 
 
@@ -778,7 +810,7 @@ const kmPercent=(n,d)=>d?100*n/d:0;
 const kmDate=d=>d?new Date(d+"T12:00:00"):new Date(0);
 const kmShort=d=>d?dateHuman(d).slice(0,5):"—";
 const kmQuantity=p=>Math.max(0,kmNum(p.stock));
-const kmSaleDone=s=>(s.inst||[]).length>0&&(s.inst||[]).every(i=>i.paid);
+const kmSaleDone=saleSettled;
 const kmPaid=s=>sumList((s.inst||[]).filter(i=>i.paid),i=>i.v);
 const kmLastSale=p=>{const a=S.sales.filter(s=>s.pid===p.id).map(s=>s.date).filter(Boolean).sort();return a.length?kmDate(a.at(-1)).getTime():0};
 const kmStockTotal=()=>({units:sumList(S.products,kmQuantity),cost:sumList(S.products,p=>kmQuantity(p)*kmNum(p.cost)),revenue:sumList(S.products,p=>kmQuantity(p)*kmNum(p.price)),critical:S.products.filter(p=>kmQuantity(p)<=kmCritical).length});
@@ -969,12 +1001,180 @@ const chosen=menu.find(x=>x[0]===opPane)||menu[0];return `<div class="km-head"><
 /* ====== NUVEM (Firebase): cole aqui as chaves do seu projeto ====== */
 const FB={apiKey:"AIzaSyBuFjPwSwD9Fv7FgT68Pd-r7jfzBvuLH4o",authDomain:"agenda-vendas-9922a.firebaseapp.com",projectId:"agenda-vendas-9922a",appId:"1:345264054186:web:80a2fa55bd025f2b5a55d3"};
 let db=null,au=null,cloudOn=false,unsubs=[],last={products:{},sales:{},catalog:{},cphotos:{},expenses:{},closings:{},config:{},proofs:{}},ready={};
-function cloudSave(){
+// Rules can report a revision collision as permission-denied before Firestore retries it.
+async function runStockTransaction(action){
+  for(let attempt=0;;attempt++){
+    const revisions=new Map();
+    try{
+      return await db.runTransaction(tx=>{
+        revisions.clear();
+        return action({
+          async get(ref){
+            const snap=await tx.get(ref);
+            if(ref.parent?.id==="products")revisions.set(ref,snap.exists?(snap.data().stockRevision??0):null);
+            return snap;
+          },
+          set:(...args)=>tx.set(...args),update:(...args)=>tx.update(...args),delete:(...args)=>tx.delete(...args)
+        });
+      });
+    }catch(error){
+      if(error.code!=="permission-denied"||attempt>=2||!revisions.size)throw error;
+      const changed=await db.runTransaction(async tx=>{
+        const comparisons=await Promise.all([...revisions].map(async ([ref,version])=>{
+          const snap=await tx.get(ref);
+          return (snap.exists?(snap.data().stockRevision??0):null)!==version;
+        }));
+        return comparisons.some(Boolean);
+      });
+      if(!changed)throw error;
+    }
+  }
+}
+// Stock writes use the server version. Snapshot JSON is a comparison baseline, never a write payload.
+const productRecord=(data,id)=>data?{...data,id}:null;
+const productEqual=(a,b)=>{
+  if(!a||!b)return a===b;
+  return Object.keys(a).length===Object.keys(b).length&&Object.keys(a).every(k=>JSON.stringify(a[k])===JSON.stringify(b[k]));
+};
+function productWithStock(before,after){
+  if((!before||before.stock!==after.stock)&&(!Number.isSafeInteger(after.stock)||after.stock<0))throw Error("Informe um estoque inteiro e não negativo.");
+  return {...after,stockRevision:before&&before.stock===after.stock?(before.stockRevision??0):(before?.stockRevision??0)+1};
+}
+function applyProductState(id,record){
+  const index=S.products.findIndex(p=>p.id===id);
+  if(record&&index>=0)S.products[index]=record;
+  else if(record)S.products.push(record);
+  else if(index>=0)S.products.splice(index,1);
+  if(record)last.products[id]=JSON.stringify(record);else delete last.products[id];
+}
+async function commitProductChanges(changes,{seed=false}={}){
+  if(!changes.length)return;
+  const hasDeletes=changes.some(change=>!change.after);
+  if(changes.length+(hasDeletes?1:0)>500)throw Error("A operação excede o limite de gravações no estoque.");
+  const result=await runStockTransaction(async tx=>{
+    const rows=await Promise.all(changes.map(async change=>{
+      const ref=db.collection("products").doc(change.id),snap=await tx.get(ref);
+      return {...change,ref,live:productRecord(snap.exists?snap.data():null,change.id)};
+    }));
+    const deletions=[];
+    const outcomes=rows.map(({ref,id,before,after,live})=>{
+      if((seed&&live)||productEqual(live,after)||(after&&productEqual(live,productWithStock(before,after))))return {id,value:live};
+      if(!productEqual(live,before))throw Error("O produto mudou em outra sessão. Reabra e confira o estoque.");
+      if(after){const value=productWithStock(live,after);tx.set(ref,value);return {id,value}}
+      deletions.push([id,live?.stockRevision??0]);
+      tx.delete(ref);return {id,value:null};
+    });
+    if(deletions.length)tx.set(db.collection("config").doc("nexus-stock-deletion"),{
+      id:"nexus-stock-deletion",actor:au.currentUser.uid,at:firebase.firestore.FieldValue.serverTimestamp(),
+      revisions:Object.fromEntries(deletions)
+    });
+    return outcomes;
+  });
+  for(const {id,value} of result){
+    const shown=S.products.find(p=>p.id===id)||null;
+    const change=changes.find(x=>x.id===id);
+    if(productEqual(shown,change.before)||productEqual(shown,change.after))applyProductState(id,value);
+  }
+  try{localStorage.setItem(KEY,JSON.stringify(S))}catch{}
+}
+let productSyncPending=Promise.resolve();
+function syncLegacyProducts(seed=false){
+  if(!ready.products&&!seed)return;
+  const current=new Map(S.products.map(p=>[p.id,JSON.parse(JSON.stringify(p))]));
+  const ids=seed?[...current.keys()]:[...new Set([...current.keys(),...Object.keys(last.products)])];
+  const changes=ids.map(id=>({id,before:seed?null:JSON.parse(last.products[id]||"null"),after:current.get(id)||null}))
+    .filter(row=>!productEqual(row.before,row.after));
+  if(!changes.length)return productSyncPending;
+  const session=au?.currentUser?.uid;
+  productSyncPending=productSyncPending.then(async()=>{
+    if(!db||!cloudOn||session!==au?.currentUser?.uid)return;
+    try{await commitProductChanges(changes,{seed})}catch(error){
+      console.error(error);
+      alert("Não foi possível sincronizar a alteração no estoque: "+error.message);
+      // Refresh the local baseline after reverting only the conflicting optimistic edits.
+      await Promise.all(changes.map(async ({id,before,after})=>{
+        const shown=S.products.find(p=>p.id===id)||null;
+        if(!productEqual(shown,after))return;
+        const snap=await db.runTransaction(tx=>tx.get(db.collection("products").doc(id))).catch(()=>null);
+        if(productEqual(S.products.find(p=>p.id===id)||null,after)){
+          if(snap)applyProductState(id,productRecord(snap.exists?snap.data():null,id));
+          else if(productEqual(JSON.parse(last.products[id]||"null"),before))applyProductState(id,before);
+        }
+      }));
+      try{localStorage.setItem(KEY,JSON.stringify(S))}catch{}
+      if(!$("modal").innerHTML)render();
+    }
+  });
+  return productSyncPending;
+}
+async function submitProductOperation(action){
+  if(productFormBusy)return;
+  if(!ready.products)return alert("Aguarde a sincronização dos produtos.");
+  productFormBusy=true;
+  try{await action()}catch(error){alert(error.message)}finally{productFormBusy=false}
+}
+async function saveProductCloud(id){
+  return submitProductOperation(async()=>{
+    const cost=+$("pc").value||0,price=+$("pp").value||0,b=pBrand(),m=b?pModel():null;
+    const operation=productFormOperation,img=tmpImg;
+    if(b&&!id){
+      if(!m)throw Error("Escolha o modelo");
+      const flavors=Object.entries(pSel);
+      if(!flavors.length)throw Error("Marque pelo menos um sabor");
+      if(flavors.length>499)throw Error("Selecione até 499 sabores por operação.");
+      const variants=await Promise.all(flavors.map(async ([flavor,qty])=>{
+        if(!Number.isSafeInteger(qty)||qty<0)throw Error("Informe quantidades inteiras e não negativas.");
+        const name=b.name+" "+m.n+" – "+flavor;
+        const existing=S.products.find(p=>norm(p.name)===norm(name));
+        const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(norm(name)));
+        const id=existing?.id||"variant-"+Array.from(new Uint8Array(digest),v=>v.toString(16).padStart(2,"0")).join("");
+        return {id,name,brand:b.name,model:m.n,flavor,cost,price,stock:qty,img:img||cph(b.name,m.n,flavor),existing:!!existing};
+      }));
+      if(new Set(variants.map(v=>v.id)).size!==variants.length)throw Error("Confira os sabores repetidos.");
+      const marker=db.collection("config").doc(operation);
+      const fingerprint=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",
+        new TextEncoder().encode(JSON.stringify(variants.map(({existing,id,...variant})=>variant))))),v=>v.toString(16).padStart(2,"0")).join("");
+      const already=await runStockTransaction(async tx=>{
+        const saved=await tx.get(marker);
+        if(saved.exists){
+          if(saved.data().fingerprint!==fingerprint)throw Error("Este cadastro já foi salvo com outros dados. Abra um novo cadastro.");
+          return null;
+        }
+        const rows=await Promise.all(variants.map(async ({existing,...variant})=>{
+          const ref=db.collection("products").doc(variant.id),snap=await tx.get(ref);
+          if(!snap.exists&&existing)throw Error("Um produto foi removido em outra sessão. Reabra o cadastro.");
+          const live=snap.exists?snap.data():null;
+          if(live&&norm(live.name)!==norm(variant.name))throw Error("Um produto mudou em outra sessão. Reabra o cadastro.");
+          const value=live?{...live,id:variant.id,stock:Number(live.stock||0)+variant.stock,
+            ...(!live.brand?{brand:variant.brand,model:variant.model,flavor:variant.flavor}:{}),
+            ...(!live.img&&img?{img}:{})}:variant;
+          return {ref,value:productWithStock(live,value),existing:!!live};
+        }));
+        for(const row of rows)tx.set(row.ref,row.value);
+        tx.set(marker,{id:operation,type:"stock-form-operation",fingerprint});
+        return rows.filter(row=>row.existing).length;
+      });
+      closeM();render();
+      if(already)alert((variants.length-already)+" pod(s) criado(s). "+already+" já existiam: só somei o estoque (custo e preço ficaram como estavam).");
+      return;
+    }
+    const before=id?productFormSnapshot:null;
+    if(id&&before?.id!==id)throw Error("Reabra o produto para editar.");
+    const key=id||operation;
+    const after={...before,id:key,name:$("pn").value.trim(),cost,price,stock:+$("ps").value||0,img:tmpImg,
+      brand:b?.name||"",model:m?.n||"",flavor:b?pCur||"":""};
+    if(!after.name)throw Error("Dê um nome ao pod");
+    await commitProductChanges([{id:key,before,after}]);
+    closeM();render();
+  });
+}
+function cloudSave(seed=false){
   if(!db||!cloudOn)return;
-  ["products","sales","catalog","cphotos","expenses","closings","config","proofs"].forEach(c=>{
+  syncLegacyProducts(seed);
+  ["sales","catalog","cphotos","expenses","closings","config","proofs"].forEach(c=>{
     const cur={};(S[c]||[]).forEach(x=>cur[x.id]=JSON.stringify(x));
-    Object.keys(cur).forEach(id=>{if(last[c][id]!==cur[id]){last[c][id]=cur[id];db.collection(c).doc(id).set(JSON.parse(cur[id])).catch(e=>console.error(e))}});
-    Object.keys(last[c]).forEach(id=>{if(!(id in cur)){delete last[c][id];db.collection(c).doc(id).delete().catch(e=>console.error(e))}});
+    Object.keys(cur).forEach(id=>{if(c==='sales'&&window.kmNexus?.managed(JSON.parse(cur[id])))return;if(last[c][id]!==cur[id]){last[c][id]=cur[id];db.collection(c).doc(id).set(JSON.parse(cur[id])).catch(e=>console.error(e))}});
+    Object.keys(last[c]).forEach(id=>{if(!(id in cur)){if(c==='sales'&&window.kmNexus?.managed(JSON.parse(last[c][id])))return;delete last[c][id];db.collection(c).doc(id).delete().catch(e=>console.error(e))}});
   });
 }
 function listen(){
@@ -1055,8 +1255,8 @@ function initCloud(){
   try{db.enablePersistence({synchronizeTabs:true}).catch(()=>{})}catch(e){}
   au.onAuthStateChanged(u=>{
     if(u){
-      authResetLoginPause();cloudOn=true;$("login").innerHTML="";
-      try{if(!localStorage.getItem(KEY+"_m")){cloudSave();localStorage.setItem(KEY+"_m","1")}}catch(e){}
+      authResetLoginPause();ready.products=false;cloudOn=true;$("login").innerHTML="";
+      try{if(!localStorage.getItem(KEY+"_m")){cloudSave(true);localStorage.setItem(KEY+"_m","1")}}catch(e){}
       listen();render();
     }else{cloudOn=false;unsubs.forEach(f=>f());unsubs=[];loginUI()}
   });
@@ -1067,7 +1267,8 @@ render();initCloud();
 <script src="central.js"></script>
 <script src="business3.js"></script>
 <script src="inventory3.js"></script>
-<script src="visual.js?v=catalogo-2"></script>
+<script src="nexus-business.js"></script>
+<script src="visual.js?v=nexus-1"></script>
 <script src="vendor/qrcode-2.0.4.js"></script>
 <script src="receipt-pdf.js?v=pdf-file-1"></script>
 <script src="receipt.js?v=pdf-file-1"></script>

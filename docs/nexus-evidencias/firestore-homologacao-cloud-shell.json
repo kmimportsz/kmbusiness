@@ -1,0 +1,16 @@
+{
+  "date": "2026-11-26",
+  "source": "Resultado informado pelo proprietário após executar o teste no Cloud Shell",
+  "codeCommit": "b88869eaa2b3e621f540dec10c0eda75fce974a3",
+  "runtime": "Node.js no Cloud Shell com código do Worker",
+  "storage": "Catálogo sintético no processo de teste",
+  "database": "(default)",
+  "project": "km-business-homologacao",
+  "orderId": "0c5f559d-c86e-46f5-a6c9-736404460499",
+  "status": "aprovado",
+  "oauth": true,
+  "sameKeyConcurrent": true,
+  "replay": true,
+  "conflictingPayloadRejected": true,
+  "invalidOriginRejected": true
+}

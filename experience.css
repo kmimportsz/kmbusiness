@@ -12,3 +12,21 @@ html{background:#050506}body{background:#050506!important;color:#f3f7ff}main,.sh
 .stock-row{display:grid;grid-template-columns:minmax(0,2fr) minmax(90px,1fr) minmax(100px,1fr);gap:12px;border-bottom:1px solid #29446e;padding:12px 0}.stock-row>*{min-width:0}#stockForm label{display:block;font-size:13px;margin:12px 0 6px}#stockForm input,#stockForm select,#stockForm textarea{width:100%}#stockFeedback{min-height:24px;color:#ffc2c2}#stockReason{min-height:50px}@media(max-width:560px){.stock-row{grid-template-columns:1fr 1fr}.stock-row>div:first-child{grid-column:1/-1}}
 
 :root,:root[data-theme="light"],:root[data-theme="dark"]{--bg:#000000;--panel:#050506;--panel2:#0b0b0e;--card:#050506;--border:#1b3056;--line:#1b3056;--bd:#1b3056;--blue:#274786;--pri:#274786}
+
+/* Order review stays scoped to the Business orders tab. */
+#nexusOrdersPanel .nexus-order{display:grid;gap:12px;margin-block:12px;padding:clamp(12px,3vw,20px);overflow-wrap:anywhere}
+.nexus-order-head,.nexus-order-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.nexus-order-head h2{margin:0;font-size:clamp(18px,3vw,24px)}
+.nexus-order p{margin:4px 0;color:inherit;opacity:.8;font-size:.87rem}
+.nexus-order-status{padding:5px 10px;border:1px solid #4279c9;border-radius:999px;font-size:.78rem}
+.nexus-order-items{list-style:none;margin:0;padding:0}
+.nexus-order-items li{display:flex;align-items:center;gap:10px;padding-block:10px;border-bottom:1px solid #7890b34d;min-width:0}
+.nexus-order-items img{width:56px;height:56px;flex:none;object-fit:cover;border-radius:10px}
+.nexus-order-items li>div{min-width:0;flex:1}
+.nexus-order-items li>b{flex:none;font-size:.85rem}
+.nexus-order-actions{display:flex;flex-wrap:wrap;gap:8px}
+.nexus-order-actions button{min-height:44px}
+.nexus-order-actions [data-nexus-action="confirm"]{background:#235bcb;color:#fff;border-color:#5f93ff}
+
+#nexusForm fieldset{border:0;padding:0;margin:0 0 14px;min-width:0}
+#nexusForm legend{padding:0;margin-bottom:8px}

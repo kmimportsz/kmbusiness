@@ -1,0 +1,44 @@
+{
+  "candidate": "e14b53d09f76c517d9e771b95836a3c63c72c90a",
+  "syntheticRehearsal": {
+    "method": "Restauração isolada com dados sintéticos, em dois emuladores locais e em um bucket de teste recriado do zero",
+    "firestore": {
+      "collections": {
+        "catalog": 0,
+        "clients": 0,
+        "config": 0,
+        "expenses": 0,
+        "inventory": 0,
+        "nexusOperators": 1,
+        "nexusOrders": 4,
+        "products": 1,
+        "proofs": 0,
+        "sales": 2
+      },
+      "backupSha256": "bca36a8db1773c0bcec5b0117ef25ce3e4c7be4a3eb584d37ce6dd632b60dc1b",
+      "restoredSha256": "bca36a8db1773c0bcec5b0117ef25ce3e4c7be4a3eb584d37ce6dd632b60dc1b"
+    },
+    "catalog": {
+      "backupSha256": "642967884db7a7e1e7d9f804cfc77d2ade89ef79f8747cb0c57604ef380eeef5",
+      "products": 1,
+      "images": 1,
+      "catalogSha256": "4056e0b1046193f7c0e61332dca3b607b245452e6ee4fc034bc9521915f74a83",
+      "photos": [
+        {
+          "sha256": "1b67a708db61f57f5b9bcd9d29c5b4dd2305aa0b2be8ccae399c6b60d3cf4d0c",
+          "contentType": "image/png"
+        }
+      ]
+    }
+  },
+  "publicProductionCatalog": {
+    "scope": "Catálogo público e imagens referenciadas, sem Firestore nem objetos privados do R2",
+    "products": 18,
+    "images": 18,
+    "manifestSha256": "acdeaaf32c68abaf0e227592408655a3d8657a63665bd39fa1149294442c520d",
+    "catalogSha256": "5b41aee03845e2f455bf93e226654336bc7f8f356612c32f32aa3416084f3721",
+    "isolatedRestore": true,
+    "archiveSha256": "9735e1942a77e004cfb5f5768a1e4180997cbd3cf391b39ccf5b563840ca9b36",
+    "archivedObjectsVerified": true
+  }
+}

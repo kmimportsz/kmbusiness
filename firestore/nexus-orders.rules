@@ -1,0 +1,197 @@
+// Complete candidate. Replace the two placeholders with the current production allowlist before staging.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function legacyAdministrator() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.get('email', '') in ['__ADMIN_EMAIL_1__', '__ADMIN_EMAIL_2__'];
+    }
+    match /{rootCollection}/{document=**} {
+      allow read, write: if legacyAdministrator()
+        && !(rootCollection in ['nexusOperators', 'nexusOrders', 'nexusOrderControl', 'nexusOrderQuota', 'sales', 'products']);
+    }
+    match /products/{productId} {
+      allow read: if legacyAdministrator();
+      allow delete: if legacyAdministrator() && currentProductDeletion(productId);
+      allow create: if legacyAdministrator()
+        && request.resource.data.stock is int && request.resource.data.stock >= 0
+        && request.resource.data.stockRevision == 1;
+      allow update: if legacyAdministrator() && validStockUpdate();
+    }
+    match /products/{productId}/{subcollection}/{document=**} {
+      allow read, write: if legacyAdministrator();
+    }
+    function currentProductDeletion(productId) {
+      let operation = getAfter(/databases/$(database)/documents/config/nexus-stock-deletion).data;
+      return operation.at == request.time && operation.actor == request.auth.uid
+        && operation.revisions.get(productId, -1) == resource.data.get('stockRevision', 0);
+    }
+    function validStockUpdate() {
+      let prior = resource.data.get('stockRevision', 0);
+      let next = request.resource.data.get('stockRevision', 0);
+      return next is int && (
+        (request.resource.data.get('stock', null) == resource.data.get('stock', null) && next == prior)
+        || (request.resource.data.stock is int && request.resource.data.stock >= 0 && next == prior + 1)
+      );
+    }
+    match /sales/{saleId} {
+      // The existing client subscribes to the whole collection. Keep reads for both administrators.
+      allow read: if legacyAdministrator();
+      allow create, update: if legacyAdministrator()
+        && (!nexusManagedSaleId(saleId) || nexusManagedSaleWrite(saleId));
+      allow delete: if legacyAdministrator() && !nexusManagedSaleId(saleId);
+    }
+    match /sales/{saleId}/{subcollection}/{document=**} {
+      allow read, write: if legacyAdministrator() && !nexusManagedSaleId(saleId);
+    }
+
+    // The operator documents are provisioned by the project administrator through IAM.
+    function nexusOperator() {
+      return legacyAdministrator()
+        && get(/databases/$(database)/documents/nexusOperators/$(request.auth.uid)).data.active == true;
+    }
+    match /nexusOperators/{uid} {
+      allow read, write: if false;
+    }
+    function anonymousBuyer() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider == 'anonymous'
+        && request.auth.uid.matches('^[A-Za-z0-9]{1,80}$');
+    }
+    function intakeEnabled() {
+      return get(/databases/$(database)/documents/nexusOrderControl/intake).data.enabled == true;
+    }
+    function buyerOrderId(orderId) {
+      return orderId.matches('^' + request.auth.uid + '_[a-f0-9-]{36}$');
+    }
+    function shortText(value, minimum, maximum) {
+      return value is string && value.size() >= minimum && value.size() <= maximum;
+    }
+    function orderAddress(address) {
+      return address is map && address.keys().hasOnly(['cep', 'street', 'number', 'reference'])
+        && address.cep is string && address.cep.matches('^[0-9]{8}$')
+        && shortText(address.street, 3, 160)
+        && address.number is string && address.number.matches('^[0-9]{1,6}[A-Za-z]?$')
+        && shortText(address.reference, 0, 180);
+    }
+    function validBuyerOrder(orderId) {
+      let order = request.resource.data;
+      let quota = getAfter(/databases/$(database)/documents/nexusOrderQuota/$(request.auth.uid)).data;
+      return order.keys().hasOnly(['key', 'code', 'customer', 'customerPhone', 'mode', 'address', 'notes', 'itemsJSON',
+          'subtotalCents', 'shippingCents', 'fingerprint', 'status', 'createdAt'])
+        && order.key is string && order.key.matches('^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$')
+        && orderId == request.auth.uid + '_' + order.key
+        && order.code == order.key.replace('-', '').upper()
+        && order.fingerprint is string && order.fingerprint.matches('^[a-f0-9]{64}$')
+        && order.status == 'pending' && order.createdAt == request.time
+        && order.customerPhone is string && order.customerPhone.matches('^55[1-9][0-9]{9,10}$')
+        && shortText(order.customer, 3, 120) && shortText(order.notes, 0, 500)
+        && order.subtotalCents is int && order.subtotalCents >= 0 && order.subtotalCents <= 1000000000
+        && ((order.mode == 'pickup' && order.address == null && order.shippingCents == 0)
+          || (order.mode == 'delivery' && orderAddress(order.address) && order.shippingCents == null))
+        && shortText(order.itemsJSON, 2, 24000)
+        && quota.id == orderId && quota.at == request.time;
+    }
+    match /nexusOrderQuota/{uid} {
+      function validQuotaWrite() {
+        let quota = request.resource.data;
+        return anonymousBuyer() && uid == request.auth.uid
+          && quota.keys().hasOnly(['id', 'at'])
+          && quota.id is string && buyerOrderId(quota.id)
+          && quota.at == request.time
+          && !exists(/databases/$(database)/documents/nexusOrders/$(quota.id))
+          && existsAfter(/databases/$(database)/documents/nexusOrders/$(quota.id));
+      }
+      allow create: if validQuotaWrite();
+      allow update: if request.time >= resource.data.at + duration.value(30, 's')
+        && validQuotaWrite();
+    }
+    match /nexusOrders/{orderId} {
+      allow get: if (anonymousBuyer() && buyerOrderId(orderId)) || nexusOperator();
+      allow list: if nexusOperator();
+      allow create: if anonymousBuyer() && intakeEnabled() && validBuyerOrder(orderId);
+      allow update: if nexusOperator()
+        && resource.data.status == 'pending'
+        && request.resource.data.decidedBy == request.auth.uid
+        && request.resource.data.decidedAt is string
+        && (
+          (
+            request.resource.data.status == 'cancelled'
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['status', 'decidedBy', 'decidedAt'])
+          ) || (
+            request.resource.data.status == 'confirmed'
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['status', 'decidedBy', 'decidedAt', 'saleId', 'confirmedShippingCents'])
+            && request.resource.data.confirmedShippingCents is int
+            && request.resource.data.confirmedShippingCents >= 0
+            && (resource.data.shippingCents == null
+              || request.resource.data.confirmedShippingCents == resource.data.shippingCents)
+            && request.resource.data.saleId == 'pedido-' + orderId
+            && !exists(/databases/$(database)/documents/sales/$(request.resource.data.saleId))
+            && existsAfter(/databases/$(database)/documents/sales/$(request.resource.data.saleId))
+            && getAfter(/databases/$(database)/documents/sales/$(request.resource.data.saleId)).data.orderId == orderId
+            && getAfter(/databases/$(database)/documents/sales/$(request.resource.data.saleId)).data.source == 'catalog'
+            && getAfter(/databases/$(database)/documents/sales/$(request.resource.data.saleId)).data.inst == []
+          )
+        );
+    }
+
+    // Reserve precisely the IDs the PR client uses for managed sales.
+    function nexusManagedSaleId(saleId) {
+      return saleId.matches('^(pedido|manual)-[A-Za-z0-9_-]+$');
+    }
+    function nexusChargeValid(charge) {
+      return charge is map && charge.id is string
+        && charge.v is number && charge.v > 0
+        && charge.d is string && charge.d.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && charge.paid is bool
+        && ((!charge.paid && charge.pd == null)
+          || (charge.paid && charge.pd is string && charge.pd.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')));
+    }
+    function nexusSaleRevision(next, prior, audit) {
+      let onlyCharges = next.diff(prior).affectedKeys().hasOnly(['inst','revision','updatedAt','events']);
+      return audit.actor == request.auth.uid
+        && (
+          (audit.label == 'Venda revisada' && next.inst == prior.inst)
+          || (onlyCharges && audit.chargeIndex is int && audit.chargeIndex >= 0
+            && audit.chargeIndex < next.inst.size() && nexusChargeValid(next.inst[audit.chargeIndex])
+            && (
+              (audit.label == 'Cobrança registrada'
+                && audit.chargeIndex == prior.inst.size() && next.inst.size() == prior.inst.size() + 1
+                && next.inst.removeAll([next.inst[audit.chargeIndex]]) == prior.inst)
+              || (audit.label == 'Cobrança revisada' && next.inst.size() == prior.inst.size()
+                && prior.inst[audit.chargeIndex].paid == false
+                && next.inst[audit.chargeIndex].id == prior.inst[audit.chargeIndex].id
+                && next.inst.removeAll([next.inst[audit.chargeIndex]]) == prior.inst.removeAll([prior.inst[audit.chargeIndex]]))
+            ))
+        );
+    }
+    function nexusManagedSaleWrite(saleId) {
+      let next = request.resource.data;
+      return nexusOperator()
+        && next.id == saleId
+        && next.items is list && next.items.size() > 0 && next.items.size() <= 30
+        && next.inst is list && next.events is list && next.revision is int
+        && (
+          (!exists(/databases/$(database)/documents/sales/$(saleId))
+            && next.revision == 1 && next.inst.size() == 0 && next.events.size() == 1
+            && (
+              (saleId.matches('^manual-.*') && next.source == 'manual') ||
+              (saleId == 'pedido-' + next.orderId && next.source == 'catalog'
+                && getAfter(/databases/$(database)/documents/nexusOrders/$(next.orderId)).data.saleId == saleId
+                && getAfter(/databases/$(database)/documents/nexusOrders/$(next.orderId)).data.status == 'confirmed')
+            )
+          ) ||
+          (exists(/databases/$(database)/documents/sales/$(saleId))
+            && next.revision == resource.data.revision + 1
+            && next.events.size() == resource.data.events.size() + 1
+            && next.events.removeAll([next.events[next.events.size() - 1]]) == resource.data.events
+            && nexusSaleRevision(next, resource.data, next.events[next.events.size() - 1])
+            && !next.diff(resource.data).affectedKeys().hasAny(['id', 'source', 'orderId', 'orderCode', 'createdAt'])
+          )
+        );
+    }
+  }
+}

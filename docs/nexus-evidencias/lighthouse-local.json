@@ -1,0 +1,31 @@
+{
+  "environment": "Local demonstration with synthetic catalog data and no real commerce integrations",
+  "baseline": {
+    "version": "13.1.0",
+    "measuredAt": "2026-11-25T21:11:16.860Z",
+    "formFactor": "mobile",
+    "scores": {
+      "performance": 0.75,
+      "accessibility": 0.96,
+      "best-practices": 0.96
+    },
+    "firstContentfulPaintMs": 2133.7437,
+    "largestContentfulPaintMs": 6457.4874,
+    "totalBlockingTimeMs": 21,
+    "cumulativeLayoutShift": 0.008211580705348236
+  },
+  "candidate": {
+    "version": "13.1.0",
+    "measuredAt": "2026-11-25T21:13:31.596Z",
+    "formFactor": "mobile",
+    "scores": {
+      "performance": 0.98,
+      "accessibility": 1,
+      "best-practices": 1
+    },
+    "firstContentfulPaintMs": 1801.7599,
+    "largestContentfulPaintMs": 2176.7599,
+    "totalBlockingTimeMs": 0,
+    "cumulativeLayoutShift": 0.01029603187058842
+  }
+}
